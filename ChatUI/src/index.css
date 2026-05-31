@@ -1,0 +1,279 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ============================================
+   CSS Variables - Design Tokens
+   ============================================ */
+:root {
+  --primary: #0068FF;
+  --primary-light: #E5F0FF;
+  --primary-dark: #0052CC;
+  --secondary: #FF7F50;
+  --background: #FFFFFF;
+  --background-secondary: #F5F5F5;
+  --text-primary: #1F1F1F;
+  --text-secondary: #757575;
+  --border: #E8E8E8;
+  --success: #4CAF50;
+  --error: #F44336;
+  --warning: #FF9800;
+
+  /* Layout tokens */
+  --sidebar-width: 320px;
+  --sidebar-width-sm: 280px;
+  --header-height: 56px;
+}
+
+/* ============================================
+   Base Styles
+   ============================================ */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html {
+  font-size: 16px;
+  -webkit-tap-highlight-color: transparent;
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  background-color: var(--background);
+  color: var(--text-primary);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow: hidden;
+  height: 100dvh;
+}
+
+#root {
+  height: 100dvh;
+  overflow: hidden;
+}
+
+/* ============================================
+   Button Styles - Override
+   ============================================ */
+.btn-primary {
+  background-color: #0068FF !important;
+  color: white !important;
+  box-shadow: 0 2px 8px rgba(0, 104, 255, 0.25) !important;
+  padding: 0.75rem 1.5rem !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.025em !important;
+}
+
+.btn-primary:hover {
+  background-color: #0052CC !important;
+  box-shadow: 0 4px 16px rgba(0, 104, 255, 0.4) !important;
+  transform: translateY(-2px);
+}
+
+.btn-primary:active {
+  transform: translateY(0) scale(0.97);
+}
+
+/* Backward compatibility */
+.btn-login {
+  background-color: #0068FF !important;
+  color: white !important;
+  box-shadow: 0 2px 8px rgba(0, 104, 255, 0.25) !important;
+  padding: 0.75rem 1.5rem !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.025em !important;
+}
+
+.btn-login:hover {
+  background-color: #0052CC !important;
+  box-shadow: 0 4px 16px rgba(0, 104, 255, 0.4) !important;
+  transform: translateY(-2px);
+}
+
+.btn-login:active {
+  transform: translateY(0) scale(0.97);
+}
+
+/* ============================================
+   Scrollbar Styles
+   ============================================ */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #9ca3af;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 2px;
+}
+
+/* ============================================
+   Tailwind Utilities Layer
+   ============================================ */
+@layer utilities {
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Full viewport height utilities */
+  .h-screen {
+    height: 100dvh;
+  }
+}
+
+/* ============================================
+   Animations
+   ============================================ */
+@keyframes highlight-pulse {
+  0%, 100% { background-color: transparent; }
+  50% { background-color: #E5F0FF; }
+}
+
+@keyframes overlayFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideInLeft {
+  from {
+    transform: translateX(-100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes slideOutLeft {
+  from {
+    transform: translateX(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateX(-100%);
+    opacity: 0;
+  }
+}
+
+.highlight-message {
+  animation: highlight-pulse 1s ease-in-out 2;
+}
+
+/* ============================================
+   Responsive Layout - Core
+   ============================================ */
+
+/* Sidebar: fixed drawer on mobile, static on desktop */
+.sidebar-drawer {
+  position: fixed;
+  inset-block: 0;
+  left: 0;
+  z-index: 50;
+  width: var(--sidebar-width);
+  max-width: 85vw;
+  background: white;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  transform: translateX(0);
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow: hidden;
+}
+
+.sidebar-drawer.is-closed {
+  transform: translateX(-100%);
+}
+
+@media (min-width: 1024px) {
+  .sidebar-drawer {
+    position: relative;
+    inset: auto;
+    z-index: auto;
+    width: var(--sidebar-width);
+    max-width: none;
+    box-shadow: none;
+    transform: none !important;
+    flex-shrink: 0;
+  }
+}
+
+/* Sidebar overlay */
+.sidebar-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(2px);
+  animation: overlayFadeIn 0.2s ease-out;
+}
+
+@media (min-width: 1024px) {
+  .sidebar-overlay {
+    display: none;
+  }
+}
+
+/* ============================================
+   Safe Area Support (iPhone X+)
+   ============================================ */
+@supports (padding: max(0px)) {
+  .pb-safe {
+    padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+  }
+  .pt-safe {
+    padding-top: max(0.75rem, env(safe-area-inset-top));
+  }
+  .pl-safe {
+    padding-left: max(0.75rem, env(safe-area-inset-left));
+  }
+  .pr-safe {
+    padding-right: max(0.75rem, env(safe-area-inset-right));
+  }
+}
+
+/* ============================================
+   Body scroll lock
+   ============================================ */
+body.drawer-open {
+  overflow: hidden;
+  position: fixed;
+  width: 100%;
+  height: 100%;
+}
+
+body.modal-open {
+  overflow: hidden;
+}
+
+/* ============================================
+   Responsive Typography
+   ============================================ */
+@media (max-width: 639px) {
+  html {
+    font-size: 15px;
+  }
+}
