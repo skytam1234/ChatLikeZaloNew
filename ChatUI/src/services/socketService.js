@@ -78,6 +78,21 @@ class SocketService {
   }
 
   /**
+   * Register a callback that fires once on the NEXT connect event.
+   * Automatically removed after firing.
+   */
+  onConnect(callback) {
+    if (this.socket?.connected) {
+      callback()
+      return
+    }
+    if (!this._pendingListeners.has("connect")) {
+      this._pendingListeners.set("connect", [])
+    }
+    this._pendingListeners.get("connect").push(callback)
+  }
+
+  /**
    * Flush all pending listeners into the real socket (called on connect).
    */
   _flushPendingListeners() {
@@ -184,6 +199,52 @@ class SocketService {
     if (this.socket?.connected) {
       this.socket.emit("mark_delivered", { conversationId, messageId });
     }
+  }
+
+  // ==================== NOTIFICATION METHODS ====================
+
+  markNotificationsRead() {
+    if (this.socket?.connected) {
+      this.socket.emit("notification_mark_read");
+    }
+  }
+
+  getNotifications(data) {
+    if (this.socket?.connected) {
+      this.socket.emit("notification_get", data);
+    }
+  }
+
+  onUserJoined(callback) {
+    this.socket?.on("user_joined", callback);
+  }
+
+  offUserJoined(callback) {
+    this.socket?.off("user_joined", callback);
+  }
+
+  onNotificationNew(callback) {
+    this.socket?.on("notification_new", callback);
+  }
+
+  offNotificationNew(callback) {
+    this.socket?.off("notification_new", callback);
+  }
+
+  onNotificationRead(callback) {
+    this.socket?.on("notification_read", callback);
+  }
+
+  offNotificationRead(callback) {
+    this.socket?.off("notification_read", callback);
+  }
+
+  onNotificationList(callback) {
+    this.socket?.on("notification_list", callback);
+  }
+
+  offNotificationList(callback) {
+    this.socket?.off("notification_list", callback);
   }
 
   onNewMessage(callback) {

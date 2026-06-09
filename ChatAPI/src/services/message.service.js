@@ -43,6 +43,7 @@ export class MessageService {
               content: true,
               senderId: true,
               messageType: true,
+              metadata: true,
               sender: {
                 select: {
                   id: true,
@@ -81,8 +82,10 @@ export class MessageService {
         content: msg.replyTo.content,
         senderId: msg.replyTo.senderId,
         messageType: msg.replyTo.messageType,
+        metadata: msg.replyTo.metadata,
         senderName: msg.replyTo.sender?.displayName,
       } : null,
+      replyToId: msg.replyToId,
       sender: msg.sender,
       status: msg.statuses[0]?.status || 'sent',
       seenAt: msg.statuses[0]?.seenAt,

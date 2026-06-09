@@ -20,6 +20,17 @@ export const MessageList = ({
   const messagesEndRef = useRef(null)
   const containerRef = useRef(null)
 
+  const handleReplyClick = (messageId) => {
+    const targetEl = document.getElementById(`message-${messageId}`)
+    if (targetEl) {
+      targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      targetEl.classList.add('ring-2', 'ring-primary', 'ring-offset-2')
+      setTimeout(() => {
+        targetEl.classList.remove('ring-2', 'ring-primary', 'ring-offset-2')
+      }, 1500)
+    }
+  }
+
   const sortedMessages = useMemo(() => {
     return [...messages].sort((a, b) => {
       const dateA = new Date(a.createdAt).getTime()
@@ -131,6 +142,7 @@ export const MessageList = ({
                   onUnpin={onUnpin}
                   onDelete={onDelete}
                   onRecall={onRecall}
+                  onReplyClick={handleReplyClick}
                 />
               </div>
             )

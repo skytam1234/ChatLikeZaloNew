@@ -11,6 +11,8 @@ import { notFoundHandler } from './src/middleware/notFound.middleware.js';
 import { responseNormalizer, responseTimeHeader, securityHeaders } from './src/middleware/response.middleware.js';
 import { errorHandler } from './src/middleware/error.middleware.js';
 import { initializeSocket } from './src/socket/index.js';
+import { startQueueWorker } from './queue.js';
+import QueueService from './src/services/queue.service.js';
 
 // Import routes
 import authRoutes from './src/routes/auth.routes.js';
@@ -22,6 +24,7 @@ import conversationMessageRoutes from './src/routes/conversation-message.routes.
 import messageRoutes from './src/routes/message.routes.js';
 import uploadRoutes from './src/routes/upload.routes.js';
 import callRoutes from './src/routes/call.routes.js';
+import aiRoutes from './src/routes/ai.routes.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -45,26 +48,12 @@ const io = initializeSocket(httpServer);
 // Trust proxy for getting real IP
 app.set('trust proxy', 1);
 
-// Security & response headers
-app.use(securityHeaders);
-app.use(responseTimeHeader);
-app.use(responseNormalizer);
-
-// Middleware
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ extended: true, limit: '50mb' }));
-
 // CORS (must be before static files for image requests)
 app.use(corsMiddleware);
 
-// Security & response headers
-app.use(securityHeaders);
-app.use(responseTimeHeader);
-app.use(responseNormalizer);
-
-// Middleware
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+// Parse JSON bodies
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 // Serve static files from DATA folder
 app.use('/uploads', express.static(path.join(__dirname, 'DATA')));
@@ -86,6 +75,11 @@ app.get('/health', (req, res) => {
   });
 });
 
+app.get('/health/queue', async (req, res) => {
+  const stats = await QueueService.getStats();
+  res.json({ status: 'ok', queue: stats });
+});
+
 // Initialize Passport and Google OAuth strategy
 configureGoogleStrategy();
 app.use(passport.initialize());
@@ -100,6 +94,7 @@ app.use('/api/conversations', conversationMessageRoutes);
 app.use('/api/messages', messageRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/calls', callRoutes);
+app.use('/api/ai', aiRoutes);
 
 // 404 handler
 app.use(notFoundHandler);
@@ -121,6 +116,7 @@ httpServer.listen(PORT, '0.0.0.0', () => {
 ║  Frontend URL: ${config.frontendUrl.padEnd(42)}║
 ╚════════════════════════════════════════════════════════════╝
   `);
+  startQueueWorker();
 });
 
 // Graceful shutdown

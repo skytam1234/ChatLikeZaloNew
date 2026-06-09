@@ -38,6 +38,7 @@ model User {
   pinnedDocuments     PinnedDocument[]   @relation("PinnedBy")
   sessions            Session[]
   unreadMessages      UnreadMessage[]
+  notifications       Notification[]
 
   @@index([email])
   @@index([username])
@@ -244,4 +245,37 @@ model Call {
   @@index([calleeId])
   @@index([status])
   @@map("calls")
+}
+
+model Notification {
+  id          String   @id @default(uuid())
+  type        String   @default("system")
+  title       String
+  content     String
+  isRead      Boolean  @default(false)
+  metadata    Json?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  userId      String   @map("user_id")
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([userId, isRead])
+  @@index([createdAt])
+  @@map("notifications")
+}
+
+model Queue {
+  id        String    @id @default(uuid())
+  type      String
+  payload   Json
+  status    String    @default("pending")
+  error     String?   @db.Text
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+
+  @@index([status, createdAt])
+  @@index([type])
+  @@map("queues")
 }

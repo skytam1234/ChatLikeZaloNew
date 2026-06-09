@@ -4,7 +4,10 @@ import config from '../config/index.js';
 import prisma from '../config/prisma.js';
 import { generateTokens, getTokenExpiration, verifyToken } from '../utils/jwt.js';
 import { NotFoundError, AuthenticationError, ConflictError, ValidationError } from '../middleware/error.middleware.js';
-import { sendPasswordResetEmail } from './email.service.js';
+import queueService from './queue.service.js';
+import socketService from '../socket/services/socket.service.js';
+import { SOCKET_EVENTS } from '../socket/events.js';
+import notificationService from './notification.service.js';
 
 export class AuthService {
   /**
@@ -37,7 +40,7 @@ export class AuthService {
         passwordHash,
         displayName,
         phoneNumber,
-        isVerified: true, // Auto-verify for development
+        isVerified: true,
       },
       select: {
         id: true,
@@ -51,14 +54,38 @@ export class AuthService {
       },
     });
 
+    // Broadcast new user notification to all existing users
+    const notificationPayload = {
+      userId: user.id,
+      username: user.username,
+      displayName: user.displayName,
+      avatarUrl: user.avatarUrl,
+    };
+
+    // Save notifications to DB for all existing users
+    await notificationService.createBulkNotifications({
+      excludeUserId: user.id,
+      type: 'system',
+      title: 'Người dùng mới',
+      content: `${user.displayName} đã tham gia hệ thống`,
+      metadata: notificationPayload,
+    });
+
+    // Emit real-time event to all online users
+    if (socketService.io) {
+      socketService.io.to('user_announcement').emit(SOCKET_EVENTS.USER_JOINED, {
+        id: user.id,
+        username: user.username,
+        displayName: user.displayName,
+        avatarUrl: user.avatarUrl,
+        timestamp: new Date().toISOString(),
+      });
+    }
+
     return {
       user,
     };
   }
-
-  /**
-   * Login user
-   */
   async login({ email, password }, deviceInfo = {}) {
     // Find user
     const user = await prisma.user.findUnique({
@@ -260,7 +287,11 @@ export class AuthService {
     });
 
     // Send password reset email
-    await sendPasswordResetEmail(email, resetToken, user.displayName || user.username);
+    await queueService.enqueue('sendPasswordResetEmail', {
+      email,
+      resetToken,
+      userName: user.displayName || user.username,
+    });
 
     return { message: 'If email exists, reset link has been sent' };
   }

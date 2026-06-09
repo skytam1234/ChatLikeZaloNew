@@ -1,13 +1,15 @@
-#  Zalo-like Chat Application
+# Zalo-like Chat Application
 
-A full-featured real-time chat application inspired by Zalo, built with React + Vite on the frontend and Node.js + Express + Prisma on the backend. Supports direct messaging, group chats, file/image sharing, audio/video calls via WebRTC, and Google OAuth authentication.
+A full-featured real-time chat application inspired by Zalo, built with React + Vite on the frontend and Node.js + Express + Prisma on the backend. Supports direct messaging, group chats, file/image sharing, audio/video calls via WebRTC, Google OAuth, and AI-powered translation.
 
 ---
+
 ## Tech Stack
 
 ### Frontend (`ChatUI/`)
+
 | Category | Technology |
-|----------|-----------|
+|----------|------------|
 | Framework | React 18.3.1 |
 | Build Tool | Vite 6.0.5 |
 | Language | JavaScript (ES Modules) |
@@ -17,117 +19,333 @@ A full-featured real-time chat application inspired by Zalo, built with React + 
 | HTTP Client | Axios 1.7.9 |
 | Real-time | Socket.IO Client 4.8.1 |
 | Video/Audio Calls | Simple Peer 9.11.1 (WebRTC) |
-| UI Components | Radix UI (Dialog, Avatar, Dropdown, Tabs, Toast, Tooltip) |
-| Icons | Lucide React |
-| Date Utils | date-fns |
+| UI Components | Radix UI (Avatar, Dialog, Dropdown, Label, Slot, Tabs, Toast, Tooltip) |
+| Icons | Lucide React 0.468.0 |
+| Date Utils | date-fns 4.1.0 |
+| Audio | readable-stream 4.7.0 |
+| Utilities | class-variance-authority, clsx, tailwind-merge, uuid 11.0.3 |
 
 ### Backend (`ChatAPI/`)
+
 | Category | Technology |
-|----------|-----------|
+|----------|------------|
 | Runtime | Node.js (ES Modules) |
 | Framework | Express 4.21.0 |
 | Database | MySQL + Prisma ORM 6.0.0 |
 | Real-time | Socket.IO 4.8.0 |
 | Authentication | JWT + Passport.js |
 | OAuth | Google OAuth2 |
-| File Upload | Multer |
-| Email | Nodemailer |
-| Validation | Zod |
-| Password Hashing | bcryptjs |
-| Testing | Vitest |
+| File Upload | Multer 2.1.1 |
+| Email | Nodemailer 8.0.8 |
+| Validation | Zod 3.23.8 |
+| Password Hashing | bcryptjs 2.4.3 |
+| AI | Vercel AI SDK 6.0.0 + OpenRouter |
+| Testing | Vitest 2.1.0 |
 
 ---
 
 ## Project Structure
 
 ```
-ChatTrungGian/
-├── ChatAPI/                          # Backend API
+ChatLikeZaloNew/
+├── ChatAPI/                              # Backend API
 │   ├── src/
-│   │   ├── config/                   # App configuration
-│   │   ├── middleware/                # Express middlewares (CORS, error handling, etc.)
-│   │   ├── routes/                   # API route definitions
-│   │   │   ├── auth.routes.js        # /api/auth
-│   │   │   ├── auth/                 # Google OAuth routes
-│   │   │   ├── user.routes.js        # /api/users
-│   │   │   ├── admin.routes.js       # /api/admin
-│   │   │   ├── conversation.routes.js # /api/conversations
-│   │   │   ├── message.routes.js     # /api/messages
-│   │   │   ├── upload.routes.js      # /api/upload
-│   │   │   └── call.routes.js        # /api/calls
-│   │   ├── socket/                   # Socket.IO setup and handlers
-│   │   ├── services/                # Business logic
-│   │   └── utils/                   # Helper functions
+│   │   ├── config/
+│   │   │   ├── index.js                 # App configuration
+│   │   │   ├── prisma.js                # Prisma client singleton
+│   │   │   └── passport.config.js        # Google OAuth setup
+│   │   ├── controllers/
+│   │   │   ├── auth.controller.js       # Authentication logic
+│   │   │   ├── auth/google.controller.js # Google OAuth callbacks
+│   │   │   ├── user.controller.js       # User management
+│   │   │   ├── conversation.controller.js # Conversations
+│   │   │   ├── message.controller.js    # Messages
+│   │   │   ├── upload.controller.js     # File uploads
+│   │   │   ├── admin.controller.js     # Admin panel
+│   │   │   └── ai.controller.js       # AI translation
+│   │   ├── routes/
+│   │   │   ├── auth.routes.js           # /api/auth
+│   │   │   ├── auth/google.routes.js    # /api/auth/google
+│   │   │   ├── user.routes.js           # /api/users
+│   │   │   ├── admin.routes.js          # /api/admin
+│   │   │   ├── conversation.routes.js   # /api/conversations
+│   │   │   ├── conversation-message.routes.js # /api/conversations/:id/messages
+│   │   │   ├── message.routes.js        # /api/messages
+│   │   │   ├── upload.routes.js         # /api/upload
+│   │   │   ├── call.routes.js           # /api/calls
+│   │   │   └── ai.routes.js             # /api/ai
+│   │   ├── services/
+│   │   │   ├── auth.service.js          # Auth business logic
+│   │   │   ├── message.service.js       # Message CRUD
+│   │   │   ├── conversation.service.js  # Conversation logic
+│   │   │   ├── notification.service.js  # Notifications
+│   │   │   ├── queue.service.js         # Background job queue
+│   │   │   ├── email.service.js         # SMTP email sending
+│   │   │   ├── ai.service.js            # OpenRouter AI integration
+│   │   │   ├── admin.service.js         # Admin operations
+│   │   │   └── callCleanup.service.js   # Stale call cleanup
+│   │   ├── middleware/
+│   │   │   ├── auth.middleware.js        # JWT auth, role check
+│   │   │   ├── cors.middleware.js       # CORS config
+│   │   │   ├── error.middleware.js      # Error classes, handler, rate limiter
+│   │   │   ├── notFound.middleware.js   # 404 handler
+│   │   │   ├── response.middleware.js   # Response helpers
+│   │   │   ├── upload.middleware.js     # Multer file upload
+│   │   │   ├── multerError.middleware.js # Upload error handler
+│   │   │   └── validate.middleware.js    # Zod validation
+│   │   ├── validators/
+│   │   │   ├── auth.validator.js        # Auth Zod schemas
+│   │   │   ├── message.validator.js     # Message/conversation schemas
+│   │   │   └── admin.validator.js      # Admin Zod schemas
+│   │   ├── utils/
+│   │   │   ├── jwt.js                   # JWT generation/verification
+│   │   │   └── fileHelper.js           # File metadata helpers
+│   │   ├── socket/
+│   │   │   ├── index.js                 # Socket.IO setup
+│   │   │   ├── events.js                # Event constants
+│   │   │   ├── handlers/
+│   │   │   │   ├── message.handler.js   # Typing, read receipts
+│   │   │   │   ├── call.handler.js      # Full WebRTC call logic
+│   │   │   │   └── notification.handler.js # Notification handlers
+│   │   │   └── services/
+│   │   │       └── socket.service.js    # Presence, rooms
+│   │   └── tasks/
+│   │       ├── index.js                 # Task loader
+│   │       └── sendPasswordResetEmail.task.js # Async email task
 │   ├── prisma/
-│   │   ├── schema.prisma             # Database schema
-│   │   ├── seed.js                   # Database seed script
-│   │   └── cleanup-calls.js          # Stale call cleanup script
-│   ├── DATA/                        # Uploaded files (images, audio, etc.)
-│   ├── server.js                    # Entry point
-│   ├── .env                         # Environment variables
+│   │   ├── schema.prisma                # Database schema (11 models)
+│   │   ├── seed.js                      # Database seed script
+│   │   └── cleanup-calls.js             # Stale call cleanup script
+│   ├── server.js                        # Entry point
+│   ├── queue.js                         # Queue worker process
+│   ├── .env                             # Environment variables
+│   ├── .env.production                  # Production environment template
 │   └── package.json
 │
-├── ChatUI/                           # Frontend React app
+├── ChatUI/                              # Frontend React app
 │   ├── src/
-│   │   ├── api/                     # Axios API service modules
-│   │   ├── components/             # React components
-│   │   │   ├── chat/               # Chat-related components
-│   │   │   ├── call/               # Call UI components
-│   │   │   ├── common/             # Shared components
-│   │   │   ├── layout/             # Layout components
-│   │   │   └── settings/          # Settings components
-│   │   ├── pages/                  # Page components
-│   │   │   ├── auth/               # Login, Register, Password reset pages
-│   │   │   ├── chat/               # Chat pages
-│   │   │   ├── admin/              # Admin dashboard
-│   │   │   └── settings/           # Settings page
-│   │   ├── stores/                 # Zustand state stores
-│   │   ├── App.jsx
-│   │   └── main.jsx
-│   ├── .env                        # Vite environment variables
-│   ├── index.html
+│   │   ├── api/                        # Axios API modules
+│   │   │   ├── axiosClient.js          # Axios instance with interceptors
+│   │   │   ├── authApi.js              # Authentication API
+│   │   │   ├── conversationApi.js     # Conversation API
+│   │   │   ├── messageApi.js           # Message API
+│   │   │   ├── userApi.js              # User API
+│   │   │   ├── pinnedApi.js            # Pinned documents API
+│   │   │   ├── callApi.js              # Call history API
+│   │   │   ├── admin.js                # Admin API
+│   │   │   ├── settingsApi.js          # Settings API
+│   │   │   ├── googleAuthApi.js        # Google OAuth API
+│   │   │   └── aiApi.js                # AI translation API
+│   │   ├── components/
+│   │   │   ├── chat/                  # Chat components
+│   │   │   │   ├── ChatBubble.jsx
+│   │   │   │   ├── ChatInput.jsx
+│   │   │   │   ├── MessageList.jsx
+│   │   │   │   ├── ConversationItem.jsx
+│   │   │   │   ├── ConversationHeader.jsx
+│   │   │   │   ├── GroupMemberList.jsx
+│   │   │   │   ├── AudioPlayer.jsx
+│   │   │   │   ├── TypingIndicator.jsx
+│   │   │   │   └── PinnedDocuments.jsx
+│   │   │   ├── call/                  # Call components
+│   │   │   │   ├── CallOverlay.jsx
+│   │   │   │   └── IncomingCallModal.jsx
+│   │   │   ├── common/                # Shared components
+│   │   │   │   ├── Avatar.jsx, Badge.jsx, Button.jsx
+│   │   │   │   ├── Card.jsx, Input.jsx, Modal.jsx
+│   │   │   │   ├── SessionExpiredModal.jsx, Spinner.jsx
+│   │   │   │   ├── Textarea.jsx, Toast.jsx
+│   │   │   └── layout/                # Layout components
+│   │   │       ├── Header.jsx, Sidebar.jsx, MainLayout.jsx
+│   │   ├── pages/
+│   │   │   ├── auth/                  # Auth pages
+│   │   │   │   ├── Login.jsx, Register.jsx
+│   │   │   │   ├── ForgotPassword.jsx, ResetPassword.jsx
+│   │   │   │   └── AuthCallback.jsx
+│   │   │   ├── chat/                 # Chat pages
+│   │   │   │   ├── ChatLayout.jsx, ConversationPage.jsx
+│   │   │   │   ├── NewConversationPage.jsx, CallHistoryPage.jsx
+│   │   │   ├── admin/               # Admin dashboard
+│   │   │   │   └── AdminDashboard.jsx
+│   │   │   ├── settings/             # Settings pages
+│   │   │   │   ├── SettingsPage.jsx
+│   │   │   │   └── tabs/
+│   │   │   │       ├── ProfileTab.jsx, PasswordTab.jsx
+│   │   │   │       ├── NotificationsTab.jsx, SessionsTab.jsx
+│   │   │   └── ai/                  # AI chat page
+│   │   │       └── AiChatPage.jsx
+│   │   ├── stores/                  # Zustand state stores
+│   │   │   ├── authStore.js         # Authentication state
+│   │   │   ├── conversationStore.js  # Conversations state
+│   │   │   ├── messageStore.js       # Messages state
+│   │   │   ├── callStore.js         # Call state
+│   │   │   ├── notificationStore.js  # Notifications state
+│   │   │   └── settingsStore.js     # Settings state
+│   │   ├── services/
+│   │   │   ├── socketService.js     # Socket.IO connection
+│   │   │   └── webrtcService.js    # WebRTC service
+│   │   ├── hooks/                   # Custom React hooks
+│   │   │   ├── useAuth.js, useAuthGuard.js, useTokenRefresh.js
+│   │   │   ├── useConversations.js, useMessages.js, useSocket.js
+│   │   │   └── usePinnedDocs.js
+│   │   ├── contexts/
+│   │   │   ├── AuthContext.jsx       # Auth context provider
+│   │   │   ├── SocketContext.jsx    # Socket.IO context
+│   │   │   └── ChatContext.jsx      # Chat context
+│   │   ├── utils/
+│   │   │   ├── constants.js, helpers.js, formatters.js
+│   │   │   ├── tokenService.js, storage.js, cn.js
+│   │   ├── types.js, App.jsx, main.jsx, index.css
+│   ├── .env.example                  # Environment template
+│   ├── .env.production               # Production environment
+│   ├── index.html, vite.config.js, tailwind.config.js
 │   └── package.json
 │
-├── package.json                      # Root package.json (Playwright for testing)
 └── README.md
 ```
 
+---
 
+## Setup & Installation
 
+### Prerequisites
+
+- **Node.js** 18+ (recommended 20 LTS)
+- **MySQL** 8.0+ (local or remote)
+- **npm** or **yarn**
+
+### 1. Backend Setup (`ChatAPI/`)
+
+```bash
+cd ChatAPI
+
+# Install dependencies
+npm install
+
+# Configure environment
+cp .env .env.local
+# Edit .env.local with your database credentials and secrets
+
+# Generate Prisma client
+npx prisma generate
+
+# Create database (MySQL)
+# mysql -u root -p
+# CREATE DATABASE chat_db;
+
+# Push schema to database
+npx prisma db push
+
+# Seed test data
+npm run prisma:seed
+
+# Start development server
+npm run dev
 ```
 
-### Frontend (`ChatUI/.env`)
+### 2. Frontend Setup (`ChatUI/`)
+
+```bash
+cd ChatUI
+
+# Install dependencies
+npm install
+
+# Configure environment
+cp .env.example .env
+# Edit .env with your API URL
+
+# Start development server
+npm run dev
+```
+
+The app will be available at `http://localhost:5173`.
+
+### 3. Production Build
+
+```bash
+# Backend
+cd ChatAPI
+npm run build  # or just: node server.js
+
+# Frontend
+cd ChatUI
+npm run build
+# Output will be in ChatUI/dist/
+```
+
+---
+
+## Environment Variables
+
+### Frontend (`ChatUI/.env.example`)
 
 ```env
 VITE_API_URL=http://localhost:3000
 VITE_SOCKET_URL=http://localhost:3000
 ```
 
+### Backend (`ChatAPI/.env`)
 
-### Standard Users
+```env
+# Environment
+NODE_ENV=development
+
+# Server
+PORT=3000
+
+# Database
+DATABASE_URL="mysql://root:password@localhost:3306/chat_db"
+
+# JWT Authentication
+JWT_SECRET=your-64-char-random-secret
+JWT_EXPIRES_IN=15m
+JWT_REFRESH_EXPIRES_IN=7d
+
+# Frontend URL (for CORS)
+FRONTEND_URL=http://localhost:5173
+
+# Bcrypt
+BCRYPT_ROUNDS=12
+
+# SMTP Email
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_SECURE=false
+SMTP_USER=your-email@gmail.com
+SMTP_PASS=your-app-password
+
+# Google OAuth
+GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=your-client-secret
+GOOGLE_CALLBACK_URL=http://localhost:3000/api/auth/google/callback
+
+# OpenRouter AI (optional)
+OPENROUTER_API_KEY=sk-or-v1-your-key
+```
+
+---
+
+## Demo Accounts
+
+After running `npm run prisma:seed`, the following accounts are available:
 
 | Username | Email | Password | Role |
 |----------|-------|----------|------|
-| admin | admin@test.com | Anhtam1234 | admin |
-| user01 | user01@test.com | Anhtam1234 | user |
-| user02 | user02@test.com | Anhtam1234 | user |
+| user1 | user1@example.com | password123 | user |
+| user2 | user2@example.com | password123 | user |
+| user3 | user3@example.com | password123 | user |
+
+Seed data includes:
+- 1 direct conversation between user1 and user2
+- 1 group conversation ("Test Group") with user1, user2, user3
+- 2 sample messages in the direct conversation
 
 ### Creating an Admin Account
-
-Seed data only creates standard users. To create an admin:
 
 ```sql
 UPDATE users SET role = 'admin' WHERE email = 'user1@example.com';
 ```
-
-
-
-### Seed Data
-
-The seed script also creates:
-- 1 direct conversation between user1 and user2
-- 1 group conversation ("Test Group") with user1, user2, user3
-- Sample messages between user1 and user2
 
 ---
 
@@ -158,6 +376,8 @@ The seed script also creates:
 - [x] Unread count tracking
 - [x] Typing indicators
 - [x] Pin messages to conversation
+- [x] Search messages within conversation
+- [x] View images shared in conversation
 
 ### Conversations
 - [x] Create direct conversations
@@ -178,8 +398,9 @@ The seed script also creates:
 - [x] Incoming call modal with accept/decline
 - [x] Call states: ringing, accepted, declined, missed, ended
 - [x] Call duration tracking
-- [x] Call history page
+- [x] Call history page with filter (all, missed, answered)
 - [x] Call occupation prevention (no double calls)
+- [x] Automatic stale call cleanup
 
 ### Real-time
 - [x] Socket.IO for live updates
@@ -189,10 +410,14 @@ The seed script also creates:
 - [x] Message read receipts (real-time)
 - [x] Incoming call notifications
 
+### AI Features
+- [x] AI-powered English-Vietnamese translation
+- [x] Chat with AI assistant
+
 ### Admin Panel
 - [x] Dashboard with statistics
 - [x] User management (list, view details)
-- [x] Change user roles (user ↔ admin)
+- [x] Change user roles (user <-> admin)
 - [x] Toggle user active status
 - [x] Delete users
 
@@ -262,6 +487,14 @@ http://localhost:3000/api
 | POST | `/conversations/:id/mute` | Toggle mute |
 | GET | `/conversations/:id/members` | List members |
 | POST | `/conversations/:id/leave` | Leave conversation |
+| GET | `/conversations/:id/messages` | Get messages |
+| GET | `/conversations/:id/messages/search` | Search messages |
+| POST | `/conversations/:id/messages` | Send message |
+| POST | `/conversations/:id/messages/file` | Send file message |
+| GET | `/conversations/:id/pinned` | Get pinned documents |
+| POST | `/conversations/:id/pinned` | Pin a message |
+| DELETE | `/conversations/:id/pinned/:pinnedId` | Unpin a document |
+| GET | `/conversations/:id/images` | Get shared images |
 
 ### Messages
 
@@ -278,6 +511,8 @@ http://localhost:3000/api
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | `/calls/history` | Get call history |
+| GET | `/calls/history?filter=missed` | Filter by missed |
+| GET | `/calls/history?filter=answered` | Filter by answered |
 | GET | `/calls/:id` | Get call details |
 
 ### Admin (requires admin role)
@@ -285,7 +520,7 @@ http://localhost:3000/api
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | `/admin/stats` | Dashboard statistics |
-| GET | `/admin/users` | List all users |
+| GET | `/admin/users` | List all users (paginated) |
 | GET | `/admin/users/:id` | Get user details |
 | PATCH | `/admin/users/:id/role` | Update user role |
 | PATCH | `/admin/users/:id/status` | Toggle user status |
@@ -295,9 +530,20 @@ http://localhost:3000/api
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| POST | `/upload/image` | Upload image |
-| POST | `/upload/file` | Upload generic file |
-| POST | `/upload/audio` | Upload audio message |
+| POST | `/upload` | Upload single file |
+| POST | `/upload/multiple` | Upload multiple files (max 10) |
+| POST | `/upload/avatar` | Upload avatar image |
+| POST | `/upload/message` | Upload message attachment |
+| POST | `/upload/conversation-avatar` | Upload group avatar |
+| DELETE | `/upload/:filename` | Delete a file |
+| GET | `/upload/:filename` | Get file info |
+| GET | `/upload/:category/:filename/download` | Download file |
+
+### AI
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/ai/translate` | Translate message (EN <-> VI) |
 
 ---
 
@@ -307,7 +553,7 @@ http://localhost:3000/api
 
 Connect to: `http://localhost:3000`
 
-### Client → Server Events
+### Client -> Server Events
 
 | Event | Payload | Description |
 |-------|---------|-------------|
@@ -324,7 +570,7 @@ Connect to: `http://localhost:3000`
 | `call_answer` | `{ callId, answer }` | Send WebRTC answer |
 | `call_ice_candidate` | `{ callId, candidate }` | Send ICE candidate |
 
-### Server → Client Events
+### Server -> Client Events
 
 | Event | Payload | Description |
 |-------|---------|-------------|
@@ -343,4 +589,17 @@ Connect to: `http://localhost:3000`
 
 ---
 
+## Database Schema
 
+11 models: **User**, **Session**, **Conversation**, **ConversationUser**, **Message**, **MessageStatus**, **UnreadMessage**, **PinnedDocument**, **GroupMember**, **Call**, **Notification**, **Queue**.
+
+### Key Relationships
+
+- `User` <-> `Conversation` via `ConversationUser` (many-to-many)
+- `User` <-> `Message` via `MessageStatus` (read receipts)
+- `Message` <-> `Message` via `replyToId` (replies)
+- `Conversation` -> `Call` (one-to-many)
+- `User` <-> `Call` (initiated and received calls)
+- `Conversation` -> `PinnedDocument` -> `Message` (pinned messages)
+- `User` -> `Notification` (one-to-many)
+- `User` -> `Queue` (async job processing)

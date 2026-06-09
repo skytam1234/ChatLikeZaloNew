@@ -23,6 +23,7 @@ export const ROUTES = {
   SETTINGS: '/settings',
   ADMIN: '/admin',
   CALL_HISTORY: '/call-history',
+  AI_CHAT: '/ai-chat',
   NOT_FOUND: '*',
 }
 

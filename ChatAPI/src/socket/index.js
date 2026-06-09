@@ -3,6 +3,7 @@ import config from '../config/index.js';
 import socketService from './services/socket.service.js';
 import messageHandler from './handlers/message.handler.js';
 import callHandler from './handlers/call.handler.js';
+import { handleGetNotifications, handleMarkNotificationsRead } from './handlers/notification.handler.js';
 import { SOCKET_EVENTS } from './events.js';
 import prisma from '../config/prisma.js';
 import { cleanupUserCalls, startPeriodicCleanup, stopPeriodicCleanup } from '../services/callCleanup.service.js';
@@ -48,6 +49,7 @@ export function initializeSocket(httpServer) {
     socketService.trackSocket(socket.userId, socket.id);
 
     socket.join(`user:${socket.userId}`);
+    socket.join('user_announcement');
 
     // Notify user themselves that they are online (so frontend can update)
     socket.emit('user_connected', {
@@ -183,6 +185,15 @@ export function initializeSocket(httpServer) {
     // Handle ICE candidate
     socket.on(SOCKET_EVENTS.CALL_ICE_CANDIDATE, (data) => {
       callHandler.handleCallIceCandidate(socket, data);
+    });
+
+    // ==================== NOTIFICATION EVENT HANDLERS ====================
+    socket.on(SOCKET_EVENTS.NOTIFICATION_GET, (data) => {
+      handleGetNotifications(socket, data);
+    });
+
+    socket.on(SOCKET_EVENTS.NOTIFICATION_MARK_READ, () => {
+      handleMarkNotificationsRead(socket);
     });
   });
 

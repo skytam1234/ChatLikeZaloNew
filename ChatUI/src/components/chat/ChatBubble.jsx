@@ -2,7 +2,7 @@ import React, { useState, useRef } from 'react'
 import { cn } from '@/utils/cn.js'
 import { Avatar } from '@/components/common/index.js'
 import { formatMessageTime } from '@/utils/helpers.js'
-import { Check, CheckCheck, FileX2 } from 'lucide-react'
+import { Check, CheckCheck, FileX2, FileText, Film, Mic } from 'lucide-react'
 import { AudioPlayer } from './AudioPlayer.jsx'
 import { API_URL } from '@/utils/constants.js'
 
@@ -26,7 +26,6 @@ const getMetadata = (message) => {
     if (!url && content && content.startsWith('http') && (content.includes('.jpg') || content.includes('.png') || content.includes('.gif') || content.includes('.mp4') || content.includes('.webp'))) {
       url = content
     }
-
     if (!url) return ''
     if (url.startsWith('http')) return url
     return `${API_URL}${url.startsWith('/') ? '' : '/'}${url}`
@@ -58,6 +57,7 @@ export const ChatBubble = ({
   onUnpin,
   onDelete,
   onRecall,
+  onReplyClick,
 }) => {
   const [showMenu, setShowMenu] = useState(false)
   const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0 })
@@ -85,6 +85,88 @@ export const ChatBubble = ({
   const isDownloadable = () => {
     if (message.isRecalled || message.isDeleted) return false
     return ['image', 'file', 'video', 'audio'].includes(message.messageType)
+  }
+
+  const getReplyPreviewContent = (replyMsg) => {
+    if (!replyMsg) return null
+    if (replyMsg.isRecalled) return <span className="italic">Tin nhắn đã thu hồi</span>
+    if (replyMsg.isDeleted) return <span className="italic">Tin nhắn đã xóa</span>
+
+    switch (replyMsg.messageType) {
+      case 'image': {
+        const src = getMediaUrl(replyMsg)
+        return src ? (
+          <div className="flex items-center gap-2">
+            <img className="w-8 h-8 rounded object-cover shrink-0" src={src} alt="reply" />
+            <span className="text-xs">Đã gửi một ảnh</span>
+          </div>
+        ) : (
+          <span>📷 Đã gửi một ảnh</span>
+        )
+      }
+      case 'file': {
+        const meta = getMetadata(replyMsg)
+        const filename = meta?.originalName || meta?.filename || 'Tệp đính kèm'
+        return (
+          <div className="flex items-center gap-2">
+            <FileX2 className="w-4 h-4 shrink-0" />
+            <span className="truncate text-xs">{filename}</span>
+          </div>
+        )
+      }
+      case 'video': {
+        const src = getMediaUrl(replyMsg)
+        return src ? (
+          <div className="flex items-center gap-2">
+            <video
+              src={src}
+              className="w-8 h-8 rounded object-cover shrink-0"
+              muted
+              preload="metadata"
+            />
+            <span className="text-xs">Đã gửi một video</span>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2">
+            <Film className="w-4 h-4 shrink-0" />
+            <span className="text-xs">Đã gửi một video</span>
+          </div>
+        )
+      }
+      case 'audio': {
+        const src = getMediaUrl(replyMsg)
+        return (
+          <div className="flex items-center gap-2">
+            <Mic className="w-4 h-4 shrink-0" />
+            <span className="text-xs">Đã gửi một tin nhắn thoại</span>
+          </div>
+        )
+      }
+      case 'sticker': return <span>{replyMsg.content || '💬 Đã gửi một nhãn dán'}</span>
+      case 'system': return <span>{replyMsg.content || ''}</span>
+      default: return <span className="line-clamp-1">{replyMsg.content || ''}</span>
+    }
+  }
+
+  const replyHeaderTextColor = isOwn ? 'text-white/80' : 'text-primary'
+  const replyBorderColor = isOwn ? 'border-white/30' : 'border-gray-300'
+
+  const renderReplyHeader = (replyMsg) => {
+    return (
+      <div className="mb-1.5 pl-1 pr-2">
+        <div className={`flex items-start gap-1.5 text-xs ${replyHeaderTextColor}`}>
+          <div className={`w-0.5 min-h-[20px] self-stretch rounded-full shrink-0 ${replyBorderColor}`} />
+          <div className="min-w-0 flex-1">
+            <p className={`font-semibold text-[11px] leading-tight ${replyHeaderTextColor}`}>
+              {replyMsg.senderName || replyMsg.sender?.displayName || 'Người dùng'}
+            </p>
+            <div className={`mt-0.5 leading-tight ${isOwn ? 'text-white/70' : 'text-gray-500'}`}>
+              {getReplyPreviewContent(replyMsg)}
+            </div>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   const handleDownload = async () => {
@@ -360,23 +442,20 @@ export const ChatBubble = ({
         {!isOwn && !showAvatar && <div className="w-7 lg:w-8 shrink-0" />}
 
         <div className={cn('max-w-[80%] sm:max-w-[75%] lg:max-w-[70%]', isOwn && 'items-end')}>
-          {message.replyToId && message.replyTo && (
-            <div className="mb-1 rounded-lg bg-gray-100 p-1.5 lg:p-2 text-xs lg:text-sm">
-              <p className="font-medium text-primary truncate max-w-[140px] sm:max-w-[180px]">
-                {message.replyTo.senderName || message.replyTo.sender?.displayName || 'Người dùng'}
-              </p>
-              <p className="text-text-secondary line-clamp-1">
-                {message.replyTo.content || 'Tin nhắn đã thu hồi'}
-              </p>
-            </div>
-          )}
-
           <div
             className={cn(
               'rounded-2xl px-3 lg:px-4 py-2',
               isOwn ? 'rounded-tr-sm bg-primary text-white' : 'rounded-tl-sm bg-gray-100 text-text-primary'
             )}
           >
+            {message.replyTo && (
+              <div
+                className="mb-1.5 cursor-pointer"
+                onClick={() => onReplyClick?.(message.replyTo.id)}
+              >
+                {renderReplyHeader(message.replyTo)}
+              </div>
+            )}
             {renderContent()}
           </div>
 

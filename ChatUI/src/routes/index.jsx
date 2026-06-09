@@ -28,6 +28,7 @@ import {
   NewConversationPage,
   CallHistoryPage,
 } from "@/pages/chat/index.js";
+import { AiChatPage } from "@/pages/ai/index.js";
 import { SettingsPage } from "@/pages/settings/index.js";
 import { MainLayout } from "@/components/layout/index.js";
 import { PrivateRoute, AdminRoute } from "./PrivateRoute.jsx";
@@ -68,6 +69,7 @@ const AppRoutes = () => {
               element={<NewConversationPage />}
             />
             <Route path={ROUTES.CALL_HISTORY} element={<CallHistoryPage />} />
+            <Route path={ROUTES.AI_CHAT} element={<AiChatPage />} />
             <Route
               path={`${ROUTES.CHAT}/:id`}
               element={

@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useCallback, useRef } from 'react'
 import { socketService } from '@/services/socketService.js'
-import { useMessageStore, useConversationStore, useAuthStore, useCallStore } from '@/stores/index.js'
+import { useMessageStore, useConversationStore, useAuthStore, useCallStore, useNotificationStore } from '@/stores/index.js'
 import { TYPING_TIMEOUT } from '@/utils/constants.js'
 
 const SocketContext = createContext(undefined)
@@ -11,6 +11,7 @@ export const SocketProvider = ({ children }) => {
   const { updateLastMessage, addConversation, updateUserOnlineStatus } = useConversationStore()
   const { setUserOnline } = useAuthStore()
   const { setIncomingCall, resetCall } = useCallStore()
+  const { addNotification, setUnreadCount, setNotifications } = useNotificationStore()
   const typingTimersRef = useRef({})
 
   // ── Connect / Disconnect ─────────────────────────────────────────────────
@@ -20,6 +21,26 @@ export const SocketProvider = ({ children }) => {
       return
     }
     socketService.connect()
+  }, [isAuthenticated, user])
+
+  // ── Load notifications once socket is connected ──────────────────────────
+  // Must be separate from listener registration so listeners are ready BEFORE emit
+  useEffect(() => {
+    if (!isAuthenticated || !user) return
+
+    const loadNotifications = () => {
+      socketService.getNotifications({ page: 1, limit: 20 })
+    }
+
+    if (socketService.isConnected()) {
+      loadNotifications()
+    } else {
+      socketService.onConnect(loadNotifications)
+    }
+
+    return () => {
+      // No explicit off needed — onConnect auto-cleans on disconnect
+    }
   }, [isAuthenticated, user])
 
   // ── All socket listeners (registered once, socket is guaranteed ready) ──
@@ -156,6 +177,32 @@ export const SocketProvider = ({ children }) => {
       if (data.conversation) addConversation(data.conversation)
     }
 
+    // ── Notifications ────────────────────────────────────────────────────
+    const handleUserJoined = (data) => {
+      console.log('🔔 [SOCKET] New user joined:', data)
+      addNotification({
+        id: `temp_${Date.now()}`,
+        type: 'system',
+        title: 'Người dùng mới',
+        content: `${data.displayName} đã tham gia hệ thống`,
+        isRead: false,
+        createdAt: new Date().toISOString(),
+        metadata: data,
+      })
+    }
+
+    const handleNotificationList = (data) => {
+      console.log('🔔 [SOCKET] Notification list received:', data)
+      if (data?.notifications) {
+        setNotifications(data.notifications)
+        setUnreadCount(data.notifications.filter((n) => !n.isRead).length)
+      }
+    }
+
+    const handleNotificationRead = (data) => {
+      console.log('🔔 [SOCKET] Notifications marked read:', data)
+    }
+
     // Register all listeners
     socketService.onIncomingCall(handleIncomingCall)
     socketService.onNewMessage(handleNewMessage)
@@ -173,6 +220,10 @@ export const SocketProvider = ({ children }) => {
     socketService.onLeftConversation(handleLeftConversation)
     socketService.onMessageUpdated(handleMessageUpdated)
     socketService.onConversationCreated(handleConversationCreated)
+
+    socketService.onUserJoined(handleUserJoined)
+    socketService.onNotificationList(handleNotificationList)
+    socketService.onNotificationRead(handleNotificationRead)
 
     socketService.onCallCancelled(handleCallCancelled)
     socketService.onCallEnded(handleCallEnded)
@@ -209,9 +260,12 @@ export const SocketProvider = ({ children }) => {
       socketService.offLeftConversation(handleLeftConversation)
       socketService.offMessageUpdated(handleMessageUpdated)
       socketService.offConversationCreated(handleConversationCreated)
+      socketService.offUserJoined(handleUserJoined)
+      socketService.offNotificationList(handleNotificationList)
+      socketService.offNotificationRead(handleNotificationRead)
       Object.values(typingTimersRef.current).forEach(clearTimeout)
     }
-  }, [isAuthenticated, user, addMessage, updateLastMessage, setTypingUser, removeTypingUser, updateMessage, recallMessage, addConversation, updateUserOnlineStatus, setUserOnline, setIncomingCall, resetCall])
+  }, [isAuthenticated, user, addMessage, updateLastMessage, setTypingUser, removeTypingUser, updateMessage, recallMessage, addConversation, updateUserOnlineStatus, setUserOnline, setIncomingCall, resetCall, addNotification, setUnreadCount, setNotifications])
 
   const joinConversation = useCallback((conversationId) => {
     socketService.joinConversation(conversationId)

@@ -1,6 +1,31 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react'
 import { cn } from '@/utils/cn.js'
-import { Smile, Paperclip, Send, X, Image, Mic, AudioWaveform } from 'lucide-react'
+import { Smile, Paperclip, Send, X, Image, Mic, AudioWaveform, FileText } from 'lucide-react'
+import { API_URL } from '@/utils/constants.js'
+
+const getMetadata = (message) => {
+  if (!message.metadata) return {}
+  if (typeof message.metadata === 'string') {
+    try {
+      return JSON.parse(message.metadata)
+    } catch {
+      return {}
+    }
+  }
+  return message.metadata
+}
+
+const getMediaUrl = (message) => {
+  const meta = getMetadata(message)
+  const content = message.content
+  let url = meta.url
+  if (!url && content && content.startsWith('http') && (content.includes('.jpg') || content.includes('.png') || content.includes('.gif') || content.includes('.mp4') || content.includes('.webp'))) {
+    url = content
+  }
+  if (!url) return ''
+  if (url.startsWith('http')) return url
+  return `${API_URL}${url.startsWith('/') ? '' : '/'}${url}`
+}
 
 export const ChatInput = ({
   onSendMessage,
@@ -207,6 +232,41 @@ export const ChatInput = ({
     '❣️', '💕', '💞', '💓', '💝', '💟', '😈', '👍', '👎', '👌',
   ]
 
+  const getReplyPreviewContent = (replyMsg) => {
+    if (!replyMsg) return null
+    if (replyMsg.isRecalled) return <span className="italic">Tin nhắn đã thu hồi</span>
+    if (replyMsg.isDeleted) return <span className="italic">Tin nhắn đã xóa</span>
+
+    switch (replyMsg.messageType) {
+      case 'image': {
+        const src = getMediaUrl(replyMsg)
+        return src ? (
+          <div className="flex items-center gap-2">
+            <img className="w-8 h-8 rounded object-cover shrink-0" src={src} alt="reply" />
+            <span className="text-xs text-text-secondary italic">Đã gửi một ảnh</span>
+          </div>
+        ) : (
+          <span>📷</span>
+        )
+      }
+      case 'file': {
+        const meta = getMetadata(replyMsg)
+        const filename = meta?.originalName || meta?.filename || 'Tệp đính kèm'
+        return (
+          <div className="flex items-center gap-2">
+            <FileText className="w-4 h-4 shrink-0" />
+            <span className="truncate text-xs">{filename}</span>
+          </div>
+        )
+      }
+      case 'video': return <span>🎬 Video</span>
+      case 'audio': return <span>🎤 Ghi âm</span>
+      case 'sticker': return <span>{replyMsg.content || '💬 Đã gửi một nhãn dán'}</span>
+      case 'system': return <span>{replyMsg.content || ''}</span>
+      default: return <span>{replyMsg.content || ''}</span>
+    }
+  }
+
   return (
     <div className="border-t border-border bg-white px-3 lg:px-4 pt-2 pb-2 lg:pb-3 pb-safe">
       {/* Hidden file inputs */}
@@ -221,9 +281,9 @@ export const ChatInput = ({
             <p className="text-xs font-medium text-primary truncate">
               Đang trả lời {replyTo.sender?.displayName || 'Người dùng'}
             </p>
-            <p className="line-clamp-1 text-xs lg:text-sm text-text-secondary">
-              {replyTo.content || 'Tin nhắn đã thu hồi'}
-            </p>
+            <div className="line-clamp-1 text-xs lg:text-sm text-text-secondary">
+              {getReplyPreviewContent(replyTo)}
+            </div>
           </div>
           <button
             onClick={onCancelReply}

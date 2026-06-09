@@ -84,6 +84,7 @@ export const truncateText = (text, maxLength = 50) => {
  * @returns {string}
  */
 export const getInitials = (name) => {
+  if (!name) return '?'
   return name
     .split(' ')
     .map(word => word[0])
@@ -98,6 +99,7 @@ export const getInitials = (name) => {
  * @returns {string}
  */
 export const generateAvatarColor = (id) => {
+  if (!id) return '#9CA3AF'
   const colors = [
     '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4',
     '#FFEAA7', '#DDA0DD', '#98D8C8', '#F7DC6F',

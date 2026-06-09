@@ -43,7 +43,7 @@ export const SOCKET_EVENTS = {
   CALL_MISSED_NOTIFY: 'call_missed_notify',
   CALL_NO_ANSWER: 'call_no_answer',
   CALL_CANCELLED: 'call_cancelled',
-  CALL_REJECTED: 'call_rejected', // Calle is offline or unavailable
+  CALL_REJECTED: 'call_rejected',
 
   // WebRTC signaling - Server -> Client
   CALL_OFFER_RECEIVED: 'call_offer_received',
@@ -58,11 +58,20 @@ export const SOCKET_EVENTS = {
   DISCONNECT: 'disconnect',
   AUTHENTICATED: 'authenticated',
   UNAUTHENTICATED: 'unauthenticated',
+
+  // Notification events
+  USER_JOINED: 'user_joined',
+  NOTIFICATION_NEW: 'notification_new',
+  NOTIFICATION_READ: 'notification_read',
+  NOTIFICATION_GET: 'notification_get',
+  NOTIFICATION_LIST: 'notification_list',
+  NOTIFICATION_MARK_READ: 'notification_mark_read',
 };
 
 export const SOCKET_ROOMS = {
   CONVERSATION: 'conversation:',
   USER: 'user:',
+  ANNOUNCEMENT: 'user_announcement',
 };
 
 export default {

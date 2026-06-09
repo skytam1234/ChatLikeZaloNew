@@ -4,8 +4,9 @@ import { useConversationStore } from '@/stores/index.js'
 import { useAuthStore } from '@/stores/index.js'
 import { Badge, Input } from '@/components/common/index.js'
 import { ConversationItem } from '@/components/chat/index.js'
-import { Search, Users, MessageSquare, Plus } from 'lucide-react'
+import { Search, Users, MessageSquare, Plus, Languages } from 'lucide-react'
 import { cn } from '@/utils/cn.js'
+import { ROUTES } from '@/utils/constants.js'
 
 const tabs = [
   { id: 'all', label: 'Tất cả', icon: <MessageSquare className="h-4 w-4" /> },
@@ -143,8 +144,23 @@ export const Sidebar = ({ className, onCloseMobile }) => {
         )}
       </div>
 
-      {/* New conversation button */}
-      <div className="border-t border-border p-3 lg:p-4 pb-safe">
+      {/* New conversation buttons */}
+      <div className="border-t border-border p-3 lg:p-4 pb-safe space-y-2">
+        <button
+          onClick={() => {
+            navigate(ROUTES.AI_CHAT)
+            onCloseMobile?.()
+          }}
+          className={cn(
+            'flex w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-blue-300 bg-blue-50 px-3 lg:px-4 py-3 text-sm font-medium text-blue-600 transition-colors',
+            'hover:border-blue-400 hover:bg-blue-100 active:bg-blue-200',
+            'touch-manipulation'
+          )}
+        >
+          <Languages className="h-4 w-4" />
+          <span>AI Dịch thuật</span>
+        </button>
+
         <button
           onClick={() => {
             navigate('/chat/new')
