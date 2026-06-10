@@ -29,10 +29,13 @@ export const AuthCallback = () => {
           return
         }
 
-        // Decode the base64url payload
+        // Decode the base64url payload (must use TextDecoder for proper UTF-8 handling)
         let payload
         try {
-          payload = JSON.parse(atob(token))
+          const binaryString = atob(token)
+          const bytes = Uint8Array.from(binaryString, (c) => c.charCodeAt(0))
+          const decoder = new TextDecoder('utf-8')
+          payload = JSON.parse(decoder.decode(bytes))
         } catch {
           navigate(`${ROUTES.LOGIN}?error=invalid_token`, { replace: true })
           return
