@@ -99,12 +99,28 @@ export class MessageHandler {
         },
       });
 
+      // Look up replyTo for socket broadcast
+      const replyToMsg = replyToId ? await prisma.message.findUnique({
+        where: { id: replyToId },
+        select: {
+          id: true,
+          content: true,
+          senderId: true,
+          messageType: true,
+          metadata: true,
+          sender: {
+            select: { id: true, displayName: true },
+          },
+        },
+      }) : null;
+
       // Broadcast to conversation (exclude sender since they already have the message from REST API)
       socketService.io.to(`conversation:${conversationId}`).except(`user:${userId}`).emit('new_message', {
         message: {
           ...message,
           tempId,
           status: 'sent',
+          replyTo: replyToMsg,
         },
       });
 

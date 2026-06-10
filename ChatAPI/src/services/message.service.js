@@ -157,6 +157,7 @@ export class MessageService {
             content: true,
             senderId: true,
             messageType: true,
+            metadata: true,
             sender: {
               select: {
                 id: true,
