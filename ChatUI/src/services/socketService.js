@@ -111,8 +111,10 @@ class SocketService {
    */
   _registerNowOrPending(event, callback) {
     if (this.socket?.connected) {
+      console.log(`[SOCKET-REG] ★ register NOW | event="${event}" | socketId=${this.socket.id}`);
       this.socket.on(event, callback);
     } else {
+      console.log(`[SOCKET-REG] ★ register PENDING | event="${event}" | socketConnected=${!!this.socket?.connected}`);
       if (!this._pendingListeners.has(event)) {
         this._pendingListeners.set(event, []);
       }
@@ -462,6 +464,16 @@ class SocketService {
   }
 
   /**
+   * Leave a call room.
+   * @param {string} callId
+   */
+  leaveCallRoom(callId) {
+    if (this.socket?.connected) {
+      this.socket.emit("leave_call_room", { callId });
+    }
+  }
+
+  /**
    * Accept a call
    * @param {string} callId
    */
@@ -611,7 +623,7 @@ class SocketService {
       console.log('📞 [SOCKET] call_ringing received:', data);
       callback(data);
     };
-    this.socket?.on("call_ringing", wrapped);
+    this._registerNowOrPending("call_ringing", wrapped);
     return wrapped;
   }
 
@@ -619,11 +631,17 @@ class SocketService {
     if (wrapped) {
       this.socket?.off("call_ringing", wrapped);
     } else {
-      const internal = this._internalCallbacks.get("call_ringing");
-      if (internal) {
-        this.socket?.off("call_ringing", internal);
-        this._internalCallbacks.delete("call_ringing");
+      this.socket?.off("call_ringing");
+    }
+    const pending = this._pendingListeners.get("call_ringing");
+    if (pending) {
+      if (wrapped) {
+        const idx = pending.indexOf(wrapped);
+        if (idx !== -1) pending.splice(idx, 1);
+      } else {
+        pending.length = 0;
       }
+      if (pending.length === 0) this._pendingListeners.delete("call_ringing");
     }
   }
 
@@ -635,7 +653,7 @@ class SocketService {
       console.log('📞 [SOCKET] call_accepted received:', data);
       callback(data);
     };
-    this.socket?.on("call_accepted", wrapped);
+    this._registerNowOrPending("call_accepted", wrapped);
     return wrapped;
   }
 
@@ -643,12 +661,18 @@ class SocketService {
     if (wrapped) {
       this.socket?.off("call_accepted", wrapped);
     } else {
-      // Only remove the internal wrapped callback, not ALL listeners
-      const internal = this._internalCallbacks.get("call_accepted");
-      if (internal) {
-        this.socket?.off("call_accepted", internal);
-        this._internalCallbacks.delete("call_accepted");
+      this.socket?.off("call_accepted");
+    }
+    // Also remove from pending
+    const pending = this._pendingListeners.get("call_accepted");
+    if (pending) {
+      if (wrapped) {
+        const idx = pending.indexOf(wrapped);
+        if (idx !== -1) pending.splice(idx, 1);
+      } else {
+        pending.length = 0;
       }
+      if (pending.length === 0) this._pendingListeners.delete("call_accepted");
     }
   }
 
@@ -660,7 +684,7 @@ class SocketService {
       console.log('📞 [SOCKET] call_declined received:', data, '| socketId:', this.socket?.id);
       callback(data);
     };
-    this.socket?.on("call_declined", wrapped);
+    this._registerNowOrPending("call_declined", wrapped);
     return wrapped;
   }
 
@@ -669,6 +693,16 @@ class SocketService {
       this.socket?.off("call_declined", wrapped);
     } else {
       this.socket?.off("call_declined");
+    }
+    const pending = this._pendingListeners.get("call_declined");
+    if (pending) {
+      if (wrapped) {
+        const idx = pending.indexOf(wrapped);
+        if (idx !== -1) pending.splice(idx, 1);
+      } else {
+        pending.length = 0;
+      }
+      if (pending.length === 0) this._pendingListeners.delete("call_declined");
     }
   }
 
@@ -680,7 +714,7 @@ class SocketService {
       console.log('📞 [SOCKET] call_ended received:', data);
       callback(data);
     };
-    this.socket?.on("call_ended", wrapped);
+    this._registerNowOrPending("call_ended", wrapped);
     return wrapped;
   }
 
@@ -689,6 +723,16 @@ class SocketService {
       this.socket?.off("call_ended", wrapped);
     } else {
       this.socket?.off("call_ended");
+    }
+    const pending = this._pendingListeners.get("call_ended");
+    if (pending) {
+      if (wrapped) {
+        const idx = pending.indexOf(wrapped);
+        if (idx !== -1) pending.splice(idx, 1);
+      } else {
+        pending.length = 0;
+      }
+      if (pending.length === 0) this._pendingListeners.delete("call_ended");
     }
   }
 
@@ -700,7 +744,7 @@ class SocketService {
       console.log('📞 [SOCKET] call_cancelled received:', data, '| socketId:', this.socket?.id);
       callback(data);
     };
-    this.socket?.on("call_cancelled", wrapped);
+    this._registerNowOrPending("call_cancelled", wrapped);
     return wrapped;
   }
 
@@ -709,6 +753,16 @@ class SocketService {
       this.socket?.off("call_cancelled", wrapped);
     } else {
       this.socket?.off("call_cancelled");
+    }
+    const pending = this._pendingListeners.get("call_cancelled");
+    if (pending) {
+      if (wrapped) {
+        const idx = pending.indexOf(wrapped);
+        if (idx !== -1) pending.splice(idx, 1);
+      } else {
+        pending.length = 0;
+      }
+      if (pending.length === 0) this._pendingListeners.delete("call_cancelled");
     }
   }
 
@@ -720,13 +774,26 @@ class SocketService {
       console.log('📞 [SOCKET] call_missed_notify received:', data);
       callback(data);
     };
-    this.socket?.on("call_missed_notify", wrapped);
+    this._registerNowOrPending("call_missed_notify", wrapped);
     return wrapped;
   }
 
   offCallMissed(wrapped) {
-    if (wrapped) this.socket?.off("call_missed_notify", wrapped);
-    else this.socket?.off("call_missed_notify");
+    if (wrapped) {
+      this.socket?.off("call_missed_notify", wrapped);
+    } else {
+      this.socket?.off("call_missed_notify");
+    }
+    const pending = this._pendingListeners.get("call_missed_notify");
+    if (pending) {
+      if (wrapped) {
+        const idx = pending.indexOf(wrapped);
+        if (idx !== -1) pending.splice(idx, 1);
+      } else {
+        pending.length = 0;
+      }
+      if (pending.length === 0) this._pendingListeners.delete("call_missed_notify");
+    }
   }
 
   /**
@@ -737,7 +804,7 @@ class SocketService {
       console.log('📞 [SOCKET] call_no_answer received:', data);
       callback(data);
     };
-    this.socket?.on("call_no_answer", wrapped);
+    this._registerNowOrPending("call_no_answer", wrapped);
     return wrapped;
   }
 
@@ -745,11 +812,35 @@ class SocketService {
     if (wrapped) {
       this.socket?.off("call_no_answer", wrapped);
     } else {
-      const internal = this._internalCallbacks.get("call_no_answer");
-      if (internal) {
-        this.socket?.off("call_no_answer", internal);
-        this._internalCallbacks.delete("call_no_answer");
+      this.socket?.off("call_no_answer");
+    }
+    const pending = this._pendingListeners.get("call_no_answer");
+    if (pending) {
+      if (wrapped) {
+        const idx = pending.indexOf(wrapped);
+        if (idx !== -1) pending.splice(idx, 1);
+      } else {
+        pending.length = 0;
       }
+      if (pending.length === 0) this._pendingListeners.delete("call_no_answer");
+    }
+  }
+
+  offCallNoAnswer(wrapped) {
+    if (wrapped) {
+      this.socket?.off("call_no_answer", wrapped);
+    } else {
+      this.socket?.off("call_no_answer");
+    }
+    const pending = this._pendingListeners.get("call_no_answer");
+    if (pending) {
+      if (wrapped) {
+        const idx = pending.indexOf(wrapped);
+        if (idx !== -1) pending.splice(idx, 1);
+      } else {
+        pending.length = 0;
+      }
+      if (pending.length === 0) this._pendingListeners.delete("call_no_answer");
     }
   }
 
@@ -761,7 +852,7 @@ class SocketService {
       console.log('📞 [SOCKET] call_rejected received:', data);
       callback(data);
     };
-    this.socket?.on("call_rejected", wrapped);
+    this._registerNowOrPending("call_rejected", wrapped);
     return wrapped;
   }
 
@@ -769,11 +860,17 @@ class SocketService {
     if (wrapped) {
       this.socket?.off("call_rejected", wrapped);
     } else {
-      const internal = this._internalCallbacks.get("call_rejected");
-      if (internal) {
-        this.socket?.off("call_rejected", internal);
-        this._internalCallbacks.delete("call_rejected");
+      this.socket?.off("call_rejected");
+    }
+    const pending = this._pendingListeners.get("call_rejected");
+    if (pending) {
+      if (wrapped) {
+        const idx = pending.indexOf(wrapped);
+        if (idx !== -1) pending.splice(idx, 1);
+      } else {
+        pending.length = 0;
       }
+      if (pending.length === 0) this._pendingListeners.delete("call_rejected");
     }
   }
 
@@ -785,13 +882,26 @@ class SocketService {
       console.log('📞 [SOCKET] call_offer_received received:', data);
       callback(data);
     };
-    this.socket?.on("call_offer_received", wrapped);
+    this._registerNowOrPending("call_offer_received", wrapped);
     return wrapped;
   }
 
   offCallOfferReceived(wrapped) {
-    if (wrapped) this.socket?.off("call_offer_received", wrapped);
-    else this.socket?.off("call_offer_received");
+    if (wrapped) {
+      this.socket?.off("call_offer_received", wrapped);
+    } else {
+      this.socket?.off("call_offer_received");
+    }
+    const pending = this._pendingListeners.get("call_offer_received");
+    if (pending) {
+      if (wrapped) {
+        const idx = pending.indexOf(wrapped);
+        if (idx !== -1) pending.splice(idx, 1);
+      } else {
+        pending.length = 0;
+      }
+      if (pending.length === 0) this._pendingListeners.delete("call_offer_received");
+    }
   }
 
   /**
@@ -802,7 +912,7 @@ class SocketService {
       console.log('📞 [SOCKET] call_answer_received received:', data);
       callback(data);
     };
-    this.socket?.on("call_answer_received", wrapped);
+    this._registerNowOrPending("call_answer_received", wrapped);
     return wrapped;
   }
 
@@ -810,11 +920,17 @@ class SocketService {
     if (wrapped) {
       this.socket?.off("call_answer_received", wrapped);
     } else {
-      const internal = this._internalCallbacks.get("call_answer_received");
-      if (internal) {
-        this.socket?.off("call_answer_received", internal);
-        this._internalCallbacks.delete("call_answer_received");
+      this.socket?.off("call_answer_received");
+    }
+    const pending = this._pendingListeners.get("call_answer_received");
+    if (pending) {
+      if (wrapped) {
+        const idx = pending.indexOf(wrapped);
+        if (idx !== -1) pending.splice(idx, 1);
+      } else {
+        pending.length = 0;
       }
+      if (pending.length === 0) this._pendingListeners.delete("call_answer_received");
     }
   }
 
@@ -826,7 +942,7 @@ class SocketService {
       console.log('📞 [SOCKET] call_ice_candidate_received received:', data);
       callback(data);
     };
-    this.socket?.on("call_ice_candidate_received", wrapped);
+    this._registerNowOrPending("call_ice_candidate_received", wrapped);
     return wrapped;
   }
 
@@ -834,11 +950,17 @@ class SocketService {
     if (wrapped) {
       this.socket?.off("call_ice_candidate_received", wrapped);
     } else {
-      const internal = this._internalCallbacks.get("call_ice_candidate_received");
-      if (internal) {
-        this.socket?.off("call_ice_candidate_received", internal);
-        this._internalCallbacks.delete("call_ice_candidate_received");
+      this.socket?.off("call_ice_candidate_received");
+    }
+    const pending = this._pendingListeners.get("call_ice_candidate_received");
+    if (pending) {
+      if (wrapped) {
+        const idx = pending.indexOf(wrapped);
+        if (idx !== -1) pending.splice(idx, 1);
+      } else {
+        pending.length = 0;
       }
+      if (pending.length === 0) this._pendingListeners.delete("call_ice_candidate_received");
     }
   }
 
@@ -850,7 +972,7 @@ class SocketService {
       console.log('📞 [SOCKET] call_error received:', data);
       callback(data);
     };
-    this.socket?.on("call_error", wrapped);
+    this._registerNowOrPending("call_error", wrapped);
     return wrapped;
   }
 
@@ -858,11 +980,17 @@ class SocketService {
     if (wrapped) {
       this.socket?.off("call_error", wrapped);
     } else {
-      const internal = this._internalCallbacks.get("call_error");
-      if (internal) {
-        this.socket?.off("call_error", internal);
-        this._internalCallbacks.delete("call_error");
+      this.socket?.off("call_error");
+    }
+    const pending = this._pendingListeners.get("call_error");
+    if (pending) {
+      if (wrapped) {
+        const idx = pending.indexOf(wrapped);
+        if (idx !== -1) pending.splice(idx, 1);
+      } else {
+        pending.length = 0;
       }
+      if (pending.length === 0) this._pendingListeners.delete("call_error");
     }
   }
 

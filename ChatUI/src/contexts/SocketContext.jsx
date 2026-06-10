@@ -86,10 +86,10 @@ export const SocketProvider = ({ children }) => {
     }
 
     const handleCallAccepted = (data) => {
-      console.log('📞 [CALL] call_accepted received GLOBAL:', data, '| socketId:', socketService.socket?.id);
-      const { setCallId, callAccepted: storeCallAccepted } = useCallStore.getState();
-      if (data.callId) setCallId(data.callId);
-      storeCallAccepted();
+      // Only update callId if provided by server (caller side uses temp UUID)
+      if (data.callId) {
+        useCallStore.getState().setCallId(data.callId);
+      }
     }
 
     const handleCallRinging = (data) => {

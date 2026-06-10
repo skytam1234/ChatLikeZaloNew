@@ -267,13 +267,13 @@ export const AdminDashboard = () => {
         <Card>
           <div className="p-4 sm:p-6 pb-0">
             <div className="flex flex-col sm:flex-row gap-3">
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-secondary pointer-events-none" />
+              <div className="relative flex-1 ">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-secondary pointer-events-none " />
                 <Input
-                  placeholder="      Tìm kiếm theo tên, email, username..."
+                  placeholder="Tìm kiếm theo tên, email, username..."
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  className="pl-10"
+                  className=" !pl-12 w-full  "
                 />
               </div>
               <select

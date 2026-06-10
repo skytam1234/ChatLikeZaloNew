@@ -22,6 +22,10 @@ class WebRTCService {
     this.networkQualityInterval = null;
     this.pendingSignals = [];
     this.peerReady = false;
+    this.isCreatingPeer = false;  // guard against duplicate peer creation
+    this.isCalleeReady = false;   // true when callee has created peer (for offer guard)
+    this.peerEventHandlers = {};  // track peer event handlers for cleanup
+    this.signalTimeout = null;    // ICE gathering timeout handle
   }
 
   async _getPeerConstructor() {
@@ -64,78 +68,158 @@ class WebRTCService {
   }
 
   async createPeerAsInitiator(localStream, callId) {
-    this.isInitiator = true;
-    this.cleanupPeerOnly();
-    this.pendingSignals = [];
-    this.peerReady = false;
+    if (this.isCreatingPeer) {
+      console.log(`[WEBRTC] createPeerAsInitiator SKIPPED — already creating peer`);
+      return;
+    }
+    this.isCreatingPeer = true;
+    console.log(`[WEBRTC] ★ createPeerAsInitiator called | callId=${callId} | hasStream=${!!localStream}`);
+    try {
+      this.isInitiator = true;
+      this.cleanupPeerOnly();
+      this.pendingSignals = [];
+      this.peerReady = false;
 
-    const PeerCtor = await this._getPeerConstructor();
+      const PeerCtor = await this._getPeerConstructor();
+      console.log(`[WEBRTC] ★ PeerCtor resolved, creating peer...`);
 
-    this.peer = new PeerCtor({
-      initiator: true,
-      trickle: true,
-      stream: localStream,
-      config: DEFAULT_ICE_CONFIG,
-    });
+      this.peer = new PeerCtor({
+        initiator: true,
+        trickle: true,
+        stream: localStream,
+        config: DEFAULT_ICE_CONFIG,
+      });
+      console.log(`[WEBRTC] ★ Peer instance created (initiator=true) | peerId=${this.peer?._id}`);
 
-    this._setupPeerEvents(callId);
-    this._startNetworkQualityMonitoring();
-    this._flushPendingSignals();
+      this._setupPeerEvents(callId);
+      this._startNetworkQualityMonitoring();
+      this._flushPendingSignals();
+    } finally {
+      this.isCreatingPeer = false;
+    }
   }
 
   async createPeerAsCallee(localStream, callId) {
-    this.isInitiator = false;
-    this.cleanupPeerOnly();
-    this.pendingSignals = [];
-    this.peerReady = false;
+    if (this.isCreatingPeer) {
+      console.log(`[WEBRTC] createPeerAsCallee SKIPPED — already creating peer`);
+      return;
+    }
+    this.isCreatingPeer = true;
+    console.log(`[WEBRTC] ★ createPeerAsCallee called | callId=${callId} | hasStream=${!!localStream}`);
+    try {
+      this.isInitiator = false;
+      this.cleanupPeerOnly();
+      this.pendingSignals = [];
+      this.peerReady = false;
+      this.isCalleeReady = true;
 
-    const PeerCtor = await this._getPeerConstructor();
+      const PeerCtor = await this._getPeerConstructor();
+      console.log(`[WEBRTC] ★ PeerCtor resolved, creating peer...`);
 
-    this.peer = new PeerCtor({
-      initiator: false,
-      trickle: true,
-      stream: localStream,
-      config: DEFAULT_ICE_CONFIG,
-    });
+      this.peer = new PeerCtor({
+        initiator: false,
+        trickle: true,
+        stream: localStream,
+        config: DEFAULT_ICE_CONFIG,
+      });
+      console.log(`[WEBRTC] ★ Peer instance created (initiator=false) | peerId=${this.peer?._id}`);
 
-    this._setupPeerEvents(callId);
-    this._startNetworkQualityMonitoring();
-    this._flushPendingSignals();
+      this._setupPeerEvents(callId);
+      this._startNetworkQualityMonitoring();
+      this._flushPendingSignals();
+    } finally {
+      this.isCreatingPeer = false;
+    }
   }
 
   /**
    * Setup các sự kiện chuẩn của simple-peer
    */
   _setupPeerEvents(callId) {
-    if (!this.peer) return;
+    if (!this.peer) {
+      console.log(`[WEBRTC] ✗ _setupPeerEvents: peer is null!`);
+      return;
+    }
+    console.log(`[WEBRTC] ◆ Setting up peer events for callId=${callId} | isInitiator=${this.isInitiator}`);
 
-    this.peer.on("signal", (signalingData) => {
-      console.log("WebRTC: Generated local signal data");
+    // Clear old timeout if any
+    if (this.signalTimeout) {
+      clearTimeout(this.signalTimeout);
+      this.signalTimeout = null;
+    }
+
+    // Remove any existing handlers to prevent duplicate registration
+    const existingHandlers = this.peerEventHandlers[callId];
+    if (existingHandlers) {
+      this.peer.off("signal", existingHandlers.signal);
+      this.peer.off("connect", existingHandlers.connect);
+      this.peer.off("stream", existingHandlers.stream);
+      this.peer.off("close", existingHandlers.close);
+      this.peer.off("error", existingHandlers.error);
+    }
+
+    const signalHandler = (signalingData) => {
+      clearTimeout(this.signalTimeout);
+      const type = signalingData?.type || (signalingData?.candidate ? "ICE" : "unknown");
+      console.log(`[WEBRTC] ◆ peer.on("signal") | type=${type} | callId=${callId}`, signalingData);
       socketService.emitCallSignal(callId, signalingData);
-    });
+    };
 
-    this.peer.on("connect", () => {
-      console.log("WebRTC: Peer connected thành công!");
+    const connectHandler = () => {
+      console.log(`[WEBRTC] ✓ peer.on("connect") — DATA CHANNEL OPENED | callId=${callId}`);
       this.peerReady = true;
       this._flushPendingSignals();
-      useCallStore.getState().callAccepted();
-    });
+      const { callState } = useCallStore.getState();
+      console.log(`[WEBRTC]   current callState=${callState}`);
+      if (callState !== "connected") {
+        console.log(`[WEBRTC] ✓ Calling callAccepted() from "connect" handler`);
+        useCallStore.getState().callAccepted();
+      } else {
+        console.log(`[WEBRTC]   callState already "connected", skipping`);
+      }
+    };
 
-    this.peer.on("stream", (remoteStream) => {
-      console.log("WebRTC: Received remote stream");
+    const streamHandler = (remoteStream) => {
+      console.log(`[WEBRTC] ✓ peer.on("stream") — REMOTE STREAM RECEIVED | callId=${callId} | tracks=${remoteStream?.getTracks()?.length}`);
       useCallStore.getState().setRemoteStream(remoteStream);
-    });
+      useCallStore.getState().callAccepted();
+    };
 
-    this.peer.on("close", () => {
-      console.log("WebRTC: Peer connection closed");
+    const closeHandler = () => {
+      clearTimeout(this.signalTimeout);
+      console.log(`[WEBRTC] ✗ peer.on("close") | callId=${callId}`);
       this.cleanup();
-    });
+    };
 
-    this.peer.on("error", (error) => {
-      console.error("WebRTC: Peer error:", error);
+    const errorHandler = (error) => {
+      clearTimeout(this.signalTimeout);
+      console.error(`[WEBRTC] ✗ peer.on("error") | callId=${callId} | error=`, error.message || error);
       this.cleanup();
       useCallStore.getState().setError(error.message || "Lỗi kết nối cuộc gọi");
-    });
+    };
+
+    // ICE gathering timeout — if no answer is generated within 10s, log warning
+    this.signalTimeout = setTimeout(() => {
+      if (this.peer && !this.peer.destroyed) {
+        console.warn(`[WEBRTC] ◆ peer.on("signal") NOT fired within 10s | callId=${callId} | isInitiator=${this.isInitiator}`);
+      }
+    }, 10000);
+
+    this.peer.on("signal", signalHandler);
+    this.peer.on("connect", connectHandler);
+    this.peer.on("stream", streamHandler);
+    this.peer.on("close", closeHandler);
+    this.peer.on("error", errorHandler);
+
+    this.peerEventHandlers[callId] = {
+      signal: signalHandler,
+      connect: connectHandler,
+      stream: streamHandler,
+      close: closeHandler,
+      error: errorHandler,
+    };
+
+    console.log(`[WEBRTC] ◆ All peer event listeners registered`);
   }
 
   _startNetworkQualityMonitoring() {
@@ -188,21 +272,30 @@ class WebRTCService {
   }
 
   handleSignal(data) {
-    if (!data) return;
+    if (!data) {
+      console.log(`[WEBRTC] handleSignal: data is falsy, ignoring`);
+      return;
+    }
     if (!this.peer || this.peer.destroyed) {
+      console.log(`[WEBRTC] handleSignal: peer null/destroyed, queueing signal | type=${data?.type || 'ICE'} | pendingLen=${this.pendingSignals.length}`);
       this.pendingSignals.push(data);
       return;
     }
 
+    const signalType = data?.type || (data?.candidate ? "ICE" : "unknown");
+    console.log(`[WEBRTC] handleSignal: applying | type=${signalType} | peerDestroyed=${this.peer.destroyed}`);
     try {
       this.peer.signal(data);
+      console.log(`[WEBRTC] handleSignal: ✓ peer.signal() succeeded`);
     } catch (error) {
+      console.error(`[WEBRTC] handleSignal: ✗ peer.signal() failed | error=`, error.message || error);
       const message = String(error?.message || "").toLowerCase();
       if (
         message.includes("not ready") ||
         message.includes("set remote description") ||
         message.includes("signal")
       ) {
+        console.log(`[WEBRTC] handleSignal: queueing for retry`);
         this.pendingSignals.push(data);
         return;
       }
@@ -259,13 +352,21 @@ class WebRTCService {
     this._stopNetworkQualityMonitoring();
     this.pendingSignals = [];
     this.peerReady = false;
+    if (this.signalTimeout) {
+      clearTimeout(this.signalTimeout);
+      this.signalTimeout = null;
+    }
     if (this.peer) {
-      this.peer.off("signal");
-      this.peer.off("connect");
-      this.peer.off("stream");
-      this.peer.off("close");
-      this.peer.off("error");
-
+      const callId = this.peer._id;
+      const handlers = this.peerEventHandlers[callId];
+      if (handlers) {
+        this.peer.off("signal", handlers.signal);
+        this.peer.off("connect", handlers.connect);
+        this.peer.off("stream", handlers.stream);
+        this.peer.off("close", handlers.close);
+        this.peer.off("error", handlers.error);
+        delete this.peerEventHandlers[callId];
+      }
       this.peer.destroy();
       this.peer = null;
     }

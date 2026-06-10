@@ -34,7 +34,7 @@ import { MainLayout } from "@/components/layout/index.js";
 import { PrivateRoute, AdminRoute } from "./PrivateRoute.jsx";
 import { ROUTES } from "@/utils/constants.js";
 import { IncomingCallModal, CallOverlay } from "@/components/call/index.js";
-import { useCallStore } from "@/stores/index.js";
+import { useCallStore, useAuthStore } from "@/stores/index.js";
 import { webrtcService } from "@/services/webrtcService.js";
 import { socketService } from "@/services/socketService.js";
 import { AdminDashboard } from "@/pages/index.js";
@@ -117,61 +117,161 @@ const CallModalHandler = () => {
   // Subscribe individually — prevents re-render when unrelated slices change
   const incomingCall = useCallStore((s) => s.incomingCall);
   const callState = useCallStore((s) => s.callState);
-  const { callAccepted, callDeclined, resetCall, setIncomingCall: setIncomingCallStore, setCallId } = useCallStore.getState();
-
-  const [isAccepting, setIsAccepting] = useState(false);
+  const { callDeclined, resetCall, setIncomingCall: setIncomingCallStore, setCallId } = useCallStore.getState();
 
   // Stable ref to avoid stale-closure issues inside socket callbacks
   const incomingCallRef = useRef(null);
   incomingCallRef.current = incomingCall;
+  // Ref-based guard — synchronous, works even before re-render
+  const isAcceptingRef = useRef(false);
   // ── Accept handler ──────────────────────────────────────────────────────
   const handleAccept = async () => {
-    const call = incomingCallRef.current;
-    console.log(call);
-    console.log('[DEBUG-A] handleAccept entry', {callId:call?.callId,callType:call?.type,socketConnected:socketService.socket?.connected,socketId:socketService.socket?.id,isAccepting});
-    if (!call?.callId || isAccepting) {
-      console.log('[DEBUG-A] handleAccept guard - early return', {reason:!call?.callId?'noCallId':'isAccepting',callId:call?.callId,isAccepting});
+    // Synchronous guard check using ref
+    if (isAcceptingRef.current) {
+      console.log('[DEBUG-A] handleAccept guard - isAcceptingRef=true, skipping');
       return;
     }
-    // Extra guard: don't re-accept if already connected
+    const call = incomingCallRef.current;
+    console.log('[DEBUG-A] handleAccept entry', {callId:call?.callId,callType:call?.type,socketConnected:socketService.socket?.connected,socketId:socketService.socket?.id,isAccepting:isAcceptingRef.current});
+    if (!call?.callId) {
+      console.log('[DEBUG-A] handleAccept guard - no callId, skipping');
+      return;
+    }
     if (callState === 'connected') {
       console.log('[DEBUG-A] handleAccept guard - already connected, skipping');
       return;
     }
 
-    setIsAccepting(true);
+    isAcceptingRef.current = true;
 
     try {
       const isVideoCall = call.type === "video";
-
       await webrtcService.initLocalStream(call.type, isVideoCall);
 
       const localStream = webrtcService.getLocalStream();
       if (!localStream) {
-        throw new Error(
-          "Không thể khởi tạo luồng âm thanh/hình ảnh cho cuộc gọi.",
-        );
+        throw new Error("Không thể khởi tạo luồng âm thanh/hình ảnh cho cuộc gọi.");
       }
 
-      await webrtcService.createPeerAsCallee(localStream, call.callId);
-      console.log('[DEBUG-A] about to emit call_accept', {callId:call.callId,socketConnected:socketService.socket?.connected,socketId:socketService.socket?.id});
-
-      // Update store — this callee is now connected
+      socketService.joinCallRoom(call.callId);
       setCallId(call.callId);
-      callAccepted();
-
       acceptCall(call.callId);
       setIncomingCallStore(null);
     } catch (error) {
       console.error("Failed to accept call:", error);
-      console.log('[DEBUG-A] handleAccept caught error', {error:error.message,callId:call?.callId});
       webrtcService.cleanup();
       callDeclined();
       resetCall();
     } finally {
-      setIsAccepting(false);
+      isAcceptingRef.current = false;
     }
   };
+
+  // ── Callee WebRTC signaling ───────────────────────────────────────────
+  // Waits for offer from caller, creates non-initiator peer (generates answer),
+  // then the peer.on('signal') auto-emits answer via emitCallSignal.
+  useEffect(() => {
+    console.log(`[FE-CALLEE] ★ CALLEE_SIGNALING useEffect MOUNTED | socketId=${socketService.socket?.id} | socketConnected=${socketService.socket?.connected}`);
+
+    const handleOfferReceived = async (data) => {
+      // Ignore our own offer (callee's offer was echoed back to us)
+      const ourUserId = useAuthStore.getState().user?.id;
+      if (data.from === ourUserId) {
+        console.log(`[FE-CALLEE] ✗ IGNORED: own offer echoed back from=${data.from} | ourUserId=${ourUserId}`);
+        return;
+      }
+
+      console.log(`[FE-CALLEE] ★ handleOfferReceived | data=`, data);
+      const store = useCallStore.getState();
+      console.log(`[FE-CALLEE]   callState=${store.callState} | currentCallId=${store.currentCallId} | peer=${!!webrtcService.peer}`);
+      if (!['ringing', 'calling'].includes(store.callState)) {
+        console.log(`[FE-CALLEE] ✗ IGNORED: callState not ringing/calling`);
+        return;
+      }
+
+      const localStream = webrtcService.getLocalStream();
+      if (!localStream) {
+        console.log(`[FE-CALLEE] ✗ IGNORED: no localStream`);
+        return;
+      }
+
+      const callId = data.callId || store.currentCallId;
+      if (!callId) {
+        console.log(`[FE-CALLEE] ✗ IGNORED: no callId`);
+        return;
+      }
+
+      try {
+        if (!webrtcService.peer) {
+          console.log(`[FE-CALLEE] → Creating peer as callee (non-initiator)...`);
+          await webrtcService.createPeerAsCallee(localStream, callId);
+          console.log(`[FE-CALLEE] → peer created, checking peer.signal event setup...`);
+        }
+        if (webrtcService.peer && data.offer) {
+          console.log(`[FE-CALLEE] → Signaling offer to peer...`);
+          webrtcService.peer.signal(data.offer);
+          console.log(`[FE-CALLEE] → peer.signal(offer) called successfully`);
+        } else {
+          console.log(`[FE-CALLEE] ✗ No peer or no offer to signal | peer=${!!webrtcService.peer} | hasOffer=${!!data.offer}`);
+        }
+      } catch (error) {
+        console.error(`[FE-CALLEE] ✗ handleOfferReceived EXCEPTION:`, error.message || error);
+      }
+    };
+
+    const handleIceCandidateReceived = (data) => {
+      console.log(`[FE-CALLEE] handleIceCandidateReceived | peer=${!!webrtcService.peer}`, data);
+      if (webrtcService.peer) {
+        webrtcService.handleSignal(data.candidate);
+      } else {
+        console.log(`[FE-CALLEE] ✗ IGNORED: no peer to handle ICE`);
+      }
+    };
+
+    socketService.onCallOfferReceived(handleOfferReceived);
+    socketService.onCallIceCandidateReceived(handleIceCandidateReceived);
+
+    return () => {
+      socketService.offCallOfferReceived(handleOfferReceived);
+      socketService.offCallIceCandidateReceived(handleIceCandidateReceived);
+    };
+  }, []);
+
+  // ── Callee: listen for call_accepted to create peer (handles race where BE sends call_accepted before offer arrives) ──
+  useEffect(() => {
+    const handleCallAcceptedForCallee = async (data) => {
+      console.log(`[FE-CALLEE] ★ handleCallAcceptedForCallee FIRED | data=`, data);
+      const store = useCallStore.getState();
+      console.log(`[FE-CALLEE]   callState=${store.callState} | currentCallId=${store.currentCallId} | peer=${!!webrtcService.peer}`);
+
+      const localStream = webrtcService.getLocalStream();
+      if (!localStream) {
+        console.log(`[FE-CALLEE]   ✗ no localStream, skipping`);
+        return;
+      }
+
+      const callId = data.callId || store.currentCallId;
+      if (!callId) {
+        console.log(`[FE-CALLEE]   ✗ no callId, skipping`);
+        return;
+      }
+
+      try {
+        if (!webrtcService.peer) {
+          console.log(`[FE-CALLEE] → Creating peer as callee (non-initiator) after call_accepted...`);
+          await webrtcService.createPeerAsCallee(localStream, callId);
+        }
+        console.log(`[FE-CALLEE] → Callee peer setup complete`);
+      } catch (error) {
+        console.error(`[FE-CALLEE] ✗ handleCallAcceptedForCallee EXCEPTION:`, error.message || error);
+      }
+    };
+
+    socketService.onCallAccepted(handleCallAcceptedForCallee);
+    return () => {
+      socketService.offCallAccepted(handleCallAcceptedForCallee);
+    };
+  }, []);
 
   // ── Decline handler ─────────────────────────────────────────────────────
   const handleDecline = () => {
@@ -198,14 +298,17 @@ const CallModalHandler = () => {
   // ── Call-status listeners ───────────────────────────────────────────────
   useEffect(() => {
     const handleCallEnded = () => {
+      console.log('[FE-REMOTE] handleCallEnded fired | resetting call');
       webrtcService.cleanup();
       resetCall();
     };
     const handleCallDeclined = () => {
+      console.log('[FE-REMOTE] handleCallDeclined fired | resetting call');
       webrtcService.cleanup();
       resetCall();
     };
     const handleCallMissed = () => {
+      console.log('[FE-REMOTE] handleCallMissed fired | resetting call');
       webrtcService.cleanup();
       resetCall();
     };
@@ -222,11 +325,6 @@ const CallModalHandler = () => {
       resetCall();
     };
 
-    const handleOfferReceived = (data) => {
-      if (webrtcService.peer && data.offer) {
-        webrtcService.peer.signal(data.offer);
-      }
-    };
     const handleAnswerReceived = (data) => {
       webrtcService.handleSignal(data.answer);
     };
@@ -240,7 +338,6 @@ const CallModalHandler = () => {
     socketService.onCallNoAnswer(handleCallNoAnswer);
     socketService.onCallCancelled(handleCallCancelled);
     socketService.onCallRejected(handleCallRejected);
-    socketService.onCallOfferReceived(handleOfferReceived);
     socketService.onCallAnswerReceived(handleAnswerReceived);
     socketService.onCallIceCandidateReceived(handleIceCandidateReceived);
 
@@ -251,11 +348,18 @@ const CallModalHandler = () => {
       socketService.offCallNoAnswer();
       socketService.offCallCancelled();
       socketService.offCallRejected();
-      socketService.offCallOfferReceived(handleOfferReceived);
       socketService.offCallAnswerReceived(handleAnswerReceived);
       socketService.offCallIceCandidateReceived(handleIceCandidateReceived);
     };
   }, [resetCall, callDeclined, setIncomingCallStore]);
+
+  // Auto-dismiss IncomingCallModal when call leaves RINGING state
+  // (e.g., accepted by remote, ended, declined — from any source)
+  useEffect(() => {
+    if (callState !== 'ringing' && incomingCall) {
+      setIncomingCallStore(null);
+    }
+  }, [callState, incomingCall, setIncomingCallStore]);
 
   // ── Render ─────────────────────────────────────────────────────────────
   const showOverlay = callState !== 'idle' && callState !== 'ended' && callState !== 'rejected';

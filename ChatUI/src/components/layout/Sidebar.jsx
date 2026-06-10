@@ -89,10 +89,10 @@ export const Sidebar = ({ className, onCloseMobile }) => {
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-secondary pointer-events-none" />
           
           <Input
-            placeholder="     Tìm kiếm..."
+            placeholder="Tìm kiếm..."
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
-            className="pl-15 pr-4 "
+            className="!pl-10 pr-4 "
           />
         </div>
       </div>

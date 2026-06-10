@@ -169,6 +169,17 @@ export function initializeSocket(httpServer) {
     socket.on(SOCKET_EVENTS.JOIN_CALL_ROOM, (data) => {
       if (data?.callId) {
         socket.join(`call:${data.callId}`);
+        const roomSize = socket.adapter.rooms.get(`call:${data.callId}`)?.size || 0;
+        console.log(`[SRV] ★ join_call_room | socketId=${socket.id} | userId=${socket.userId} | callId=${data.callId} | roomSize=${roomSize}`);
+      }
+    });
+
+    // Handle leave call room
+    socket.on("leave_call_room", (data) => {
+      if (data?.callId) {
+        socket.leave(`call:${data.callId}`);
+        const roomSize = socket.adapter.rooms.get(`call:${data.callId}`)?.size || 0;
+        console.log(`[SRV] ★ leave_call_room | socketId=${socket.id} | userId=${socket.userId} | callId=${data.callId} | remainingRoomSize=${roomSize}`);
       }
     });
 

@@ -306,7 +306,14 @@ class CallHandler {
       // Join callee to call room
       socket.join(`call:${callId}`);
 
-      // Notify caller via direct socket emission (same pattern as handleCallDecline)
+      // Emit to call room so caller (who is already in it) receives call_accepted
+      socket.to(`call:${callId}`).emit(SOCKET_EVENTS.CALL_ACCEPTED, {
+        callId,
+        acceptedBy: userId,
+        timestamp: new Date().toISOString(),
+      });
+
+      // Also notify caller via direct socket emission as backup
       const callerSockets = socketService.getSocketsInRoom(`user:${call.callerId}`);
       console.log("📞 [CALL_ACCEPT] callerSockets:", callerSockets, "| callerId:", call.callerId, "| io type:", typeof socketService.io.to);
       for (const sockId of callerSockets) {
@@ -403,6 +410,7 @@ class CallHandler {
     try {
       const { callId } = data;
       const userId = socket.userId;
+      console.log(`[SRV] ★ handleCallEnd | socketId=${socket.id} | userId=${userId} | callId=${callId}`);
 
       if (!callId) {
         socket.emit(SOCKET_EVENTS.CALL_ERROR, { error: "Missing call ID" });
@@ -473,9 +481,11 @@ class CallHandler {
 
       // Emit directly to each socket of the other party
       const otherSockets = socketService.getSocketsInRoom(`user:${otherUserId}`);
+      console.log(`[SRV]   handleCallEnd: otherUserId=${otherUserId} | otherSockets=${JSON.stringify(otherSockets)} | event=${event}`);
       for (const sockId of otherSockets) {
         socketService.io.to(sockId).emit(event, payload);
       }
+      console.log(`[SRV] ✓ handleCallEnd SUCCESS | callId=${callId} | endedBy=${userId} | duration=${duration}s`);
     } catch (error) {
       console.error("Error ending call:", error);
       socket.emit(SOCKET_EVENTS.CALL_ERROR, { error: "Failed to end call" });
@@ -580,39 +590,41 @@ class CallHandler {
     try {
       const { callId, offer } = data;
       const senderId = socket.userId;
+      console.log(`[SRV] ★ handleCallOffer | socketId=${socket.id} | userId=${senderId} | callId=${callId} | hasOffer=${!!offer}`);
 
       if (!callId || !offer) {
+        console.log(`[SRV] ✗ handleCallOffer: missing callId or offer`);
         socket.emit(SOCKET_EVENTS.CALL_ERROR, { error: "Missing required fields" });
         return;
       }
 
-      const verification = await this._verifyCallParticipant(
-        socket,
-        callId,
-        senderId,
-      );
+      const verification = await this._verifyCallParticipant(socket, callId, senderId);
       if (verification.error) {
+        console.log(`[SRV] ✗ handleCallOffer: verification failed | error=${verification.error}`);
         socket.emit(SOCKET_EVENTS.CALL_ERROR, { error: verification.error });
         return;
       }
 
       const call = verification.call;
-      if (call.status !== "accepted") {
-        socket.emit(SOCKET_EVENTS.CALL_ERROR, {
-          error: "Call must be accepted before exchanging offers",
-        });
+      console.log(`[SRV]   call status=${call.status} | callerId=${call.callerId} | calleeId=${call.calleeId}`);
+      if (!["pending", "ringing", "accepted"].includes(call.status)) {
+        console.log(`[SRV] ✗ handleCallOffer: invalid status=${call.status}`);
+        socket.emit(SOCKET_EVENTS.CALL_ERROR, { error: "Call is not active" });
         return;
       }
 
-      // Forward offer to callee
+      // Forward offer to the OTHER party in the call room
+      const roomSize = socketService.io.sockets.adapter.rooms.get(`call:${callId}`)?.size || 0;
+      console.log(`[SRV]   emitting call_offer_received to room call:${callId} | roomSize=${roomSize}`);
       socket.to(`call:${callId}`).emit(SOCKET_EVENTS.CALL_OFFER_RECEIVED, {
         callId,
         offer,
         from: senderId,
         timestamp: new Date().toISOString(),
       });
+      console.log(`[SRV] ✓ handleCallOffer: forwarded offer to call:${callId}`);
     } catch (error) {
-      console.error("Error handling call offer:", error);
+      console.error("[SRV] ✗ handleCallOffer: error:", error);
       socket.emit(SOCKET_EVENTS.CALL_ERROR, { error: "Failed to forward offer" });
     }
   }
@@ -624,39 +636,39 @@ class CallHandler {
     try {
       const { callId, answer } = data;
       const senderId = socket.userId;
+      console.log(`[SRV] ★ handleCallAnswer | socketId=${socket.id} | userId=${senderId} | callId=${callId} | hasAnswer=${!!answer}`);
 
       if (!callId || !answer) {
+        console.log(`[SRV] ✗ handleCallAnswer: missing callId or answer`);
         socket.emit(SOCKET_EVENTS.CALL_ERROR, { error: "Missing required fields" });
         return;
       }
 
-      const verification = await this._verifyCallParticipant(
-        socket,
-        callId,
-        senderId,
-      );
+      const verification = await this._verifyCallParticipant(socket, callId, senderId);
       if (verification.error) {
+        console.log(`[SRV] ✗ handleCallAnswer: verification failed | error=${verification.error}`);
         socket.emit(SOCKET_EVENTS.CALL_ERROR, { error: verification.error });
         return;
       }
 
       const call = verification.call;
-      if (call.status !== "accepted") {
-        socket.emit(SOCKET_EVENTS.CALL_ERROR, {
-          error: "Call must be accepted before exchanging answers",
-        });
+      if (!["pending", "ringing", "accepted"].includes(call.status)) {
+        console.log(`[SRV] ✗ handleCallAnswer: invalid status=${call.status}`);
+        socket.emit(SOCKET_EVENTS.CALL_ERROR, { error: "Call is not active" });
         return;
       }
 
-      // Forward answer to caller
+      const roomSize = socketService.io.sockets.adapter.rooms.get(`call:${callId}`)?.size || 0;
+      console.log(`[SRV]   emitting call_answer_received to room call:${callId} | roomSize=${roomSize}`);
       socket.to(`call:${callId}`).emit(SOCKET_EVENTS.CALL_ANSWER_RECEIVED, {
         callId,
         answer,
         from: senderId,
         timestamp: new Date().toISOString(),
       });
+      console.log(`[SRV] ✓ handleCallAnswer: forwarded answer to call:${callId}`);
     } catch (error) {
-      console.error("Error handling call answer:", error);
+      console.error("[SRV] ✗ handleCallAnswer: error:", error);
       socket.emit(SOCKET_EVENTS.CALL_ERROR, { error: "Failed to forward answer" });
     }
   }
@@ -668,44 +680,38 @@ class CallHandler {
     try {
       const { callId, candidate } = data;
       const senderId = socket.userId;
+      console.log(`[SRV] ★ handleCallIceCandidate | socketId=${socket.id} | userId=${senderId} | callId=${callId} | hasCandidate=${!!candidate}`);
 
       if (!callId || !candidate) {
         socket.emit(SOCKET_EVENTS.CALL_ERROR, { error: "Missing required fields" });
         return;
       }
 
-      const verification = await this._verifyCallParticipant(
-        socket,
-        callId,
-        senderId,
-      );
+      const verification = await this._verifyCallParticipant(socket, callId, senderId);
       if (verification.error) {
+        console.log(`[SRV] ✗ handleCallIceCandidate: verification failed | error=${verification.error}`);
         socket.emit(SOCKET_EVENTS.CALL_ERROR, { error: verification.error });
         return;
       }
 
       const call = verification.call;
-      if (call.status !== "accepted") {
-        socket.emit(SOCKET_EVENTS.CALL_ERROR, {
-          error: "Call must be accepted before exchanging ICE candidates",
-        });
+      if (!["pending", "ringing", "accepted"].includes(call.status)) {
+        socket.emit(SOCKET_EVENTS.CALL_ERROR, { error: "Call is not active" });
         return;
       }
 
-      // Forward ICE candidate to other participants
-      socket
-        .to(`call:${callId}`)
-        .emit(SOCKET_EVENTS.CALL_ICE_CANDIDATE_RECEIVED, {
-          callId,
-          candidate,
-          from: senderId,
-          timestamp: new Date().toISOString(),
-        });
-    } catch (error) {
-      console.error("Error handling ICE candidate:", error);
-      socket.emit(SOCKET_EVENTS.CALL_ERROR, {
-        error: "Failed to forward ICE candidate",
+      const roomSize = socketService.io.sockets.adapter.rooms.get(`call:${callId}`)?.size || 0;
+      console.log(`[SRV]   emitting to room call:${callId} | roomSize=${roomSize}`);
+      socket.to(`call:${callId}`).emit(SOCKET_EVENTS.CALL_ICE_CANDIDATE_RECEIVED, {
+        callId,
+        candidate,
+        from: senderId,
+        timestamp: new Date().toISOString(),
       });
+      console.log(`[SRV] ✓ handleCallIceCandidate: forwarded ICE to call:${callId}`);
+    } catch (error) {
+      console.error("[SRV] ✗ handleCallIceCandidate: error:", error);
+      socket.emit(SOCKET_EVENTS.CALL_ERROR, { error: "Failed to forward ICE candidate" });
     }
   }
 }

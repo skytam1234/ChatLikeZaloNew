@@ -69,13 +69,14 @@ export const CallOverlay = ({ onClose }) => {
     }
   }, [localStream]);
 
-  // Setup remote video
+  // Setup remote video + remote audio playback
   useEffect(() => {
     if (remoteVideoRef.current && remoteStream) {
       remoteVideoRef.current.srcObject = remoteStream;
     }
     if (remoteAudioRef.current && remoteStream) {
       remoteAudioRef.current.srcObject = remoteStream;
+      remoteAudioRef.current.play().catch(() => {});
     }
   }, [remoteStream]);
 
@@ -156,14 +157,6 @@ export const CallOverlay = ({ onClose }) => {
     };
   }, [isRinging, isCalling]);
 
-  // Attach remote audio element for audio-only calls
-  useEffect(() => {
-    const audioEl = remoteAudioRef.current;
-    if (!audioEl || !remoteStream) return;
-    audioEl.srcObject = remoteStream;
-    audioEl.play().catch(() => {});
-  }, [remoteStream]);
-
   // Call timer
   useEffect(() => {
     if (isConnected) {
@@ -206,10 +199,11 @@ export const CallOverlay = ({ onClose }) => {
 
   const handleEndCall = () => {
     const currentCallId = useCallStore.getState().currentCallId;
-    console.log(currentCallId);
+    console.log(`[FE-END] handleEndCall | currentCallId=${currentCallId} | socketConnected=${socketService.socket?.connected} | socketId=${socketService.socket?.id}`);
     if (currentCallId) {
       socketService.endCall(currentCallId);
-      console.log(currentCallId);
+    } else {
+      console.warn('[FE-END] No currentCallId in store, skip emit');
     }
     resetCall();
     onClose?.();

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useAuthContext, useSocketContext, useChatContext } from '@/contexts/index.js'
-import { useConversationStore, useMessageStore, useCallStore } from '@/stores/index.js'
+import { useConversationStore, useMessageStore, useCallStore, useAuthStore } from '@/stores/index.js'
 import {
   ConversationHeader,
   MessageList,
@@ -343,6 +343,9 @@ export const ConversationPage = ({ onBack }) => {
         calleeId: callee.id,
         type: 'audio',
       })
+
+      // Join call room so we can receive WebRTC signaling (offer from callee)
+      socketService.joinCallRoom(tempCallId)
     } catch (error) {
       console.error('Failed to start call:', error)
       alert(error.message || 'Không thể bắt đầu cuộc gọi')
@@ -385,6 +388,9 @@ export const ConversationPage = ({ onBack }) => {
         calleeId: callee.id,
         type: 'video',
       })
+
+      // Join call room so we can receive WebRTC signaling (offer from callee)
+      socketService.joinCallRoom(tempCallId)
     } catch (error) {
       console.error('Failed to start video call:', error)
       alert(error.message || 'Không thể bắt đầu cuộc gọi video')
@@ -392,6 +398,158 @@ export const ConversationPage = ({ onBack }) => {
       useCallStore.getState().resetCall()
     }
   }
+
+  // ==================== CALLER WEBRTC SIGNALING ====================
+  // Handles call_accepted, offer/answer/ICE from callee and creates peer connection.
+  // Only active when caller is in CALLING or RINGING state.
+  useEffect(() => {
+    console.log(`[FE-CALLER] ★ CALLER_SIGNALING useEffect MOUNTED | socketId=${socketService.socket?.id} | socketConnected=${socketService.socket?.connected}`);
+
+    const handleCallAccepted = async (data) => {
+      try {
+        console.log(`[FE-CALLER] ★ handleCallAccepted FIRED | data=`, data);
+        console.log(`[FE-CALLER]   socketId=${socketService.socket?.id} | socketConnected=${socketService.socket?.connected}`);
+        const store = useCallStore.getState();
+        const currentState = store.callState;
+        const currentCallId = store.currentCallId;
+        console.log(`[FE-CALLER]   currentState="${currentState}" | currentCallId=${currentCallId} | peer=${!!webrtcService.peer} | expectedStates=["calling","ringing"]`);
+        if (!['calling', 'ringing'].includes(currentState)) {
+          console.log(`[FE-CALLER] ✗ SKIPPED: callState="${currentState}" not in ["calling","ringing"]`);
+          return;
+        }
+
+        const localStream = webrtcService.getLocalStream();
+        if (!localStream) {
+          console.log(`[FE-CALLER] ✗ IGNORED: no localStream`);
+          return;
+        }
+
+        const callId = data.callId || store.currentCallId;
+        if (!callId) {
+          console.log(`[FE-CALLER] ✗ IGNORED: no callId`);
+          return;
+        }
+
+        const storedCallId = store.currentCallId;
+        if (storedCallId && storedCallId !== callId) {
+          console.log(`[FE-CALLER] → Leaving temp room call:${storedCallId}, joining call:${callId}`);
+          socketService.leaveCallRoom(storedCallId);
+          socketService.joinCallRoom(callId);
+        }
+
+        console.log(`[FE-CALLER] → Storing callId=${callId}`);
+        store.setCallId(callId);
+
+        if (!webrtcService.peer) {
+          console.log(`[FE-CALLER] → Creating peer as INITIATOR...`);
+          await webrtcService.createPeerAsInitiator(localStream, callId);
+          console.log(`[FE-CALLER] → createPeerAsInitiator returned`);
+        } else {
+          console.log(`[FE-CALLER]   peer already exists, skipping`);
+        }
+      } catch (error) {
+        console.error(`[FE-CALLER] ✗ handleCallAccepted EXCEPTION:`, error.message || error);
+      }
+    }
+
+    const handleOfferReceived = async (data) => {
+      try {
+        const ourUserId = useAuthStore.getState().user?.id;
+        if (data.from === ourUserId) {
+          console.log(`[FE-CALLER] ✗ IGNORED: own offer echoed back from=${data.from} | ourUserId=${ourUserId}`);
+          return;
+        }
+
+        console.log(`[FE-CALLER] ★ handleOfferReceived (from callee) | data=`, data);
+        const store = useCallStore.getState();
+        console.log(`[FE-CALLER]   callState=${store.callState} | peer=${!!webrtcService.peer}`);
+        if (!['calling', 'ringing', 'connected'].includes(store.callState)) {
+          console.log(`[FE-CALLER] ✗ IGNORED: callState not valid`);
+          return;
+        }
+
+        const localStream = webrtcService.getLocalStream();
+        if (!localStream) {
+          console.log(`[FE-CALLER] ✗ IGNORED: no localStream`);
+          return;
+        }
+
+        if (!webrtcService.peer) {
+          console.log(`[FE-CALLER] → Creating peer as CALLEE (non-initiator)...`);
+          await webrtcService.createPeerAsCallee(localStream, data.callId);
+        }
+        if (webrtcService.peer && data.offer) {
+          console.log(`[FE-CALLER] → Signaling offer to peer...`);
+          webrtcService.peer.signal(data.offer);
+          console.log(`[FE-CALLER] → peer.signal(offer) called`);
+        } else {
+          console.log(`[FE-CALLER] ✗ No peer or no offer | peer=${!!webrtcService.peer} | hasOffer=${!!data.offer}`);
+        }
+      } catch (error) {
+        console.error(`[FE-CALLER] ✗ handleOfferReceived EXCEPTION:`, error.message || error);
+      }
+    }
+
+    const handleAnswerReceived = (data) => {
+      console.log(`[FE-CALLER] ★ handleAnswerReceived | data=`, data, ` | peer=${!!webrtcService.peer}
+`);
+      if (webrtcService.peer) {
+        webrtcService.handleSignal(data.answer);
+      } else {
+        console.log(`[FE-CALLER] ✗ IGNORED: no peer to handle answer`);
+      }
+    }
+
+    const handleIceCandidateReceived = (data) => {
+      console.log(`[FE-CALLER] handleIceCandidateReceived | peer=${!!webrtcService.peer}`, data);
+      if (webrtcService.peer) {
+        webrtcService.handleSignal(data.candidate);
+      } else {
+        console.log(`[FE-CALLER] ✗ IGNORED: no peer to handle ICE`);
+      }
+    }
+
+    const handleCallEnded = () => {
+      console.log(`[FE-CALLER] handleCallEnded`);
+      webrtcService.cleanup()
+      useCallStore.getState().resetCall()
+    }
+    const handleCallDeclined = () => {
+      console.log(`[FE-CALLER] handleCallDeclined`);
+      webrtcService.cleanup()
+      useCallStore.getState().resetCall()
+    }
+    const handleCallNoAnswer = () => {
+      console.log(`[FE-CALLER] handleCallNoAnswer`);
+      webrtcService.cleanup()
+      useCallStore.getState().resetCall()
+    }
+    const handleCallCancelled = () => {
+      console.log(`[FE-CALLER] handleCallCancelled`);
+      webrtcService.cleanup()
+      useCallStore.getState().resetCall()
+    }
+
+    socketService.onCallAccepted(handleCallAccepted)
+    socketService.onCallOfferReceived(handleOfferReceived)
+    socketService.onCallAnswerReceived(handleAnswerReceived)
+    socketService.onCallIceCandidateReceived(handleIceCandidateReceived)
+    socketService.onCallEnded(handleCallEnded)
+    socketService.onCallDeclined(handleCallDeclined)
+    socketService.onCallNoAnswer(handleCallNoAnswer)
+    socketService.onCallCancelled(handleCallCancelled)
+
+    return () => {
+      socketService.offCallAccepted(handleCallAccepted)
+      socketService.offCallOfferReceived(handleOfferReceived)
+      socketService.offCallAnswerReceived(handleAnswerReceived)
+      socketService.offCallIceCandidateReceived(handleIceCandidateReceived)
+      socketService.offCallEnded(handleCallEnded)
+      socketService.offCallDeclined(handleCallDeclined)
+      socketService.offCallNoAnswer(handleCallNoAnswer)
+      socketService.offCallCancelled(handleCallCancelled)
+    }
+  }, [])
 
 
 
