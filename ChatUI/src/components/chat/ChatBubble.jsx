@@ -98,10 +98,10 @@ export const ChatBubble = ({
         return src ? (
           <div className="flex items-center gap-2">
             <img className="w-8 h-8 rounded object-cover shrink-0" src={src} alt="reply" />
-            <span className="text-xs">Đã gửi một ảnh</span>
+            <span className="text-xs">Hình ảnh</span>
           </div>
         ) : (
-          <span>📷 Đã gửi một ảnh</span>
+          <span>📷 Hình ảnh</span>
         )
       }
       case 'file': {
